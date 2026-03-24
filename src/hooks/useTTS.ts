@@ -239,9 +239,11 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
   }, [words]);
 
   const play = useCallback(async () => {
+    if (!engineRef.current) return;
+
     // If the document is finished, reset to beginning
     const saved = await getReadingState(docId);
-    if (saved?.isFinished && engineRef.current) {
+    if (saved?.isFinished) {
       const resetState: ReadingState = {
         ...saved,
         isFinished: false,
@@ -255,13 +257,18 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
       if (store.currentChapterIndex !== 0) {
         pendingSeekRef.current = { wordIndex: 0, shouldPlay: true };
         await store.setChapter(0);
-        return; // useEffect on words change will handle play
+        return;
       } else {
         engineRef.current.seekToWord(words[0]?.index ?? 0);
         syncPosition(words[0]?.index ?? 0);
       }
     }
-    engineRef.current?.play();
+
+    // Verify highlight matches engine position before playing
+    const enginePos = engineRef.current.getCurrentWordIndex();
+    syncPosition(enginePos);
+
+    engineRef.current.play();
   }, [docId, words, syncPosition]);
 
   const pause = useCallback(() => {
@@ -361,9 +368,49 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
   const changeVoice = useCallback(
     (voiceURI: string) => {
       setVoice(voiceURI);
+      // Voice change restarts utterance in engine, confirm position
+      if (engineRef.current) {
+        syncPosition(engineRef.current.getCurrentWordIndex());
+      }
     },
-    [setVoice],
+    [setVoice, syncPosition],
   );
+
+  // Chapter navigation — must go through useTTS to coordinate with engine
+  const goToChapter = useCallback(
+    (chapterIndex: number) => {
+      if (chapterIndex < 0 || chapterIndex >= chapters.length) return;
+      const store = useAppStore.getState();
+      const wasPlaying = store.playbackState === 'playing';
+
+      // Stop current playback cleanly
+      engineRef.current?.pause();
+
+      // Queue a seek to the start of the target chapter
+      const targetStartWord = chapters[chapterIndex].startWordIndex;
+      pendingSeekRef.current = {
+        wordIndex: targetStartWord,
+        shouldPlay: wasPlaying,
+      };
+
+      store.setChapter(chapterIndex);
+    },
+    [chapters],
+  );
+
+  const nextChapter = useCallback(() => {
+    const store = useAppStore.getState();
+    if (store.currentChapterIndex < chapters.length - 1) {
+      goToChapter(store.currentChapterIndex + 1);
+    }
+  }, [chapters, goToChapter]);
+
+  const prevChapter = useCallback(() => {
+    const store = useAppStore.getState();
+    if (store.currentChapterIndex > 0) {
+      goToChapter(store.currentChapterIndex - 1);
+    }
+  }, [goToChapter]);
 
   return {
     play,
@@ -375,6 +422,9 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     skipBackward,
     setSpeed: changeSpeed,
     setVoice: changeVoice,
+    nextChapter,
+    prevChapter,
+    goToChapter,
     playbackState,
     currentWordIndex,
     currentChapterIndex,

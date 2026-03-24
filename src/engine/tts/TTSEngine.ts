@@ -264,9 +264,20 @@ export class TTSEngine {
     // Keep strong reference to prevent GC
     this.currentUtterance = utterance;
 
-    utterance.onboundary = this.handleBoundary.bind(this);
-    utterance.onend = this.handleUtteranceEnd.bind(this);
-    utterance.onerror = this.handleUtteranceError.bind(this);
+    // Guard: only process events from THIS utterance, not stale ones
+    // that fire after cancel() during voice/speed changes
+    utterance.onboundary = (e) => {
+      if (this.currentUtterance !== utterance) return;
+      this.handleBoundary(e);
+    };
+    utterance.onend = (e) => {
+      if (this.currentUtterance !== utterance) return;
+      this.handleUtteranceEnd(e);
+    };
+    utterance.onerror = (e) => {
+      if (this.currentUtterance !== utterance) return;
+      this.handleUtteranceError(e);
+    };
 
     // Start timers
     this.startWatchdogTimer(chunk);

@@ -38,6 +38,9 @@ export function ReaderView({ document: doc }: ReaderViewProps) {
     skipBackward,
     setSpeed,
     setVoice,
+    nextChapter,
+    prevChapter,
+    goToChapter,
     playbackState,
     currentWordIndex,
     availableVoices,
@@ -45,24 +48,9 @@ export function ReaderView({ document: doc }: ReaderViewProps) {
     selectedVoiceURI,
   } = useTTS(currentChapterWords, doc.chapters, doc.id);
 
-  const handleNextChapter = useCallback(() => {
-    if (currentChapterIndex < doc.chapters.length - 1) {
-      setChapter(currentChapterIndex + 1);
-    }
-  }, [currentChapterIndex, doc.chapters.length, setChapter]);
-
-  const handlePrevChapter = useCallback(() => {
-    if (currentChapterIndex > 0) {
-      setChapter(currentChapterIndex - 1);
-    }
-  }, [currentChapterIndex, setChapter]);
-
-  const handleChapterSelect = useCallback(
-    (index: number) => {
-      setChapter(index);
-    },
-    [setChapter],
-  );
+  const handleNextChapter = nextChapter;
+  const handlePrevChapter = prevChapter;
+  const handleChapterSelect = goToChapter;
 
   const handleTogglePlayPause = useCallback(() => {
     if (playbackState === 'playing') {

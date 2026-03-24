@@ -368,7 +368,7 @@ export class TTSEngine {
     this.clearWatchdogTimer();
     const wordCount = chunk.endWordIndex - chunk.startWordIndex + 1;
     const expectedMs = (wordCount / (this.rate * 2.5)) * 1000;
-    const timeout = expectedMs + 3000;
+    const timeout = expectedMs * 3 + 5000;
 
     this.watchdogTimer = setTimeout(() => {
       if (this.playbackState === 'playing' && !this.isDestroyed) {
@@ -382,7 +382,11 @@ export class TTSEngine {
 
   private startSafariEndTimer(chunk: UtteranceChunk): void {
     this.clearSafariEndTimer();
-    const timeout = chunk.text.length * 50 + 1000;
+
+    // Only use Safari end timer on platforms that use cancel-for-pause (Safari/Android)
+    if (!this.platformConfig.useCancelForPause) return;
+
+    const timeout = chunk.text.length * 100 + 5000;
 
     this.safariEndTimer = setTimeout(() => {
       if (this.playbackState === 'playing' && !this.isDestroyed) {

@@ -62,11 +62,30 @@ export async function parsePdfFile(
       const page = await pdf.getPage(p + 1); // 1-indexed
       const textContent = await page.getTextContent();
 
-      const lines: string[] = [];
+      let currentText = '';
+      let lastY: number | null = null;
 
       for (const item of textContent.items) {
-        if ('str' in item) {
-          lines.push(item.str);
+        if ('str' in item && 'transform' in item) {
+          const transform = item.transform as number[];
+          const y = transform[5];
+          const height = ('height' in item && typeof item.height === 'number' && item.height > 0)
+            ? item.height
+            : 12;
+
+          if (lastY !== null) {
+            const yDiff = Math.abs(lastY - y);
+            if (yDiff > height * 1.5) {
+              // Paragraph break (large Y gap)
+              currentText += '\n\n';
+            } else if (yDiff > height * 0.3) {
+              // Line break (small Y gap)
+              currentText += '\n';
+            }
+          }
+
+          currentText += item.str;
+          lastY = y;
 
           // Track font sizes for heading detection
           if ('height' in item && typeof item.height === 'number' && item.height > 0) {
@@ -85,7 +104,7 @@ export async function parsePdfFile(
         }
       }
 
-      pageTexts.push(lines.join(' '));
+      pageTexts.push(currentText);
 
       // Release the page to free memory
       page.cleanup();
@@ -132,20 +151,20 @@ export async function parsePdfFile(
 
 /**
  * Detect chapter boundaries based on font size analysis.
- * Items with font size > 1.3x the median are considered headings.
+ * Items with font size > 1.8x the median are considered headings.
  */
 function detectPdfChapters(
   candidates: { pageIndex: number; text: string; fontSize: number }[],
   medianFontSize: number,
   totalPages: number
 ): { pageIndex: number; title: string }[] {
-  const threshold = medianFontSize * 1.3;
+  const threshold = medianFontSize * 1.8;
 
-  // Filter for heading-like items
+  // Filter for heading-like items (require > 3 chars to skip single-char items)
   const headings = candidates.filter(
     (c) =>
       c.fontSize >= threshold &&
-      c.text.length >= 2 &&
+      c.text.length > 3 &&
       c.text.length < 150
   );
 

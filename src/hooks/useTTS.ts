@@ -224,16 +224,69 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
   }, []);
 
   const seekToWord = useCallback((wordIndex: number) => {
+    // Check if target word is in a different chapter
+    const store = useAppStore.getState();
+    for (let i = 0; i < chapters.length; i++) {
+      const ch = chapters[i];
+      if (wordIndex >= ch.startWordIndex && wordIndex <= ch.endWordIndex) {
+        if (i !== store.currentChapterIndex) {
+          // Need to switch chapters first — engine will re-init via useEffect
+          store.setChapter(i).then(() => {
+            // After chapter loads, seek within it
+            engineRef.current?.seekToWord(wordIndex);
+          });
+          return;
+        }
+        break;
+      }
+    }
     engineRef.current?.seekToWord(wordIndex);
-  }, []);
+  }, [chapters]);
 
   const skipForward = useCallback((wordCount: number) => {
+    const targetIndex = (engineRef.current?.getCurrentWordIndex() ?? 0) + wordCount;
+    const store = useAppStore.getState();
+    for (let i = 0; i < chapters.length; i++) {
+      const ch = chapters[i];
+      if (targetIndex >= ch.startWordIndex && targetIndex <= ch.endWordIndex) {
+        if (i !== store.currentChapterIndex) {
+          const wasPlaying = store.playbackState === 'playing';
+          store.setChapter(i).then(() => {
+            engineRef.current?.seekToWord(targetIndex);
+            if (wasPlaying) {
+              engineRef.current?.play();
+            }
+          });
+          return;
+        }
+        break;
+      }
+    }
     engineRef.current?.skipForward(wordCount);
-  }, []);
+  }, [chapters]);
 
   const skipBackward = useCallback((wordCount: number) => {
+    const targetIndex = (engineRef.current?.getCurrentWordIndex() ?? 0) - wordCount;
+    const clampedTarget = Math.max(0, targetIndex);
+    const store = useAppStore.getState();
+    for (let i = 0; i < chapters.length; i++) {
+      const ch = chapters[i];
+      if (clampedTarget >= ch.startWordIndex && clampedTarget <= ch.endWordIndex) {
+        if (i !== store.currentChapterIndex) {
+          const wasPlaying = store.playbackState === 'playing';
+          store.setChapter(i).then(() => {
+            engineRef.current?.seekToWord(clampedTarget);
+            if (wasPlaying) {
+              engineRef.current?.play();
+            }
+          });
+          return;
+        }
+        break;
+      }
+    }
     engineRef.current?.skipBackward(wordCount);
-  }, []);
+  }, [chapters]);
 
   const changeSpeed = useCallback(
     (newSpeed: number) => {

@@ -44,30 +44,21 @@ export function TextDisplay({
       const word = words[i];
 
       if (word.paragraphBreakBefore && currentParagraph.length > 0) {
-        result.push({ words: currentParagraph });
+        result.push({
+          words: currentParagraph,
+          ...(result.length === 0 && chapterTitle ? { chapterTitle } : {}),
+        });
         currentParagraph = [];
-      }
-
-      // Add chapter title before the first paragraph
-      if (i === 0 && chapterTitle) {
-        if (currentParagraph.length === 0) {
-          currentParagraph.push(word);
-          result.push({ words: [...currentParagraph], chapterTitle });
-          currentParagraph = [];
-          continue;
-        }
       }
 
       currentParagraph.push(word);
     }
 
     if (currentParagraph.length > 0) {
-      result.push({ words: currentParagraph });
-    }
-
-    // Attach chapter title to first paragraph if not yet attached
-    if (result.length > 0 && chapterTitle && !result[0].chapterTitle) {
-      result[0] = { ...result[0], chapterTitle };
+      result.push({
+        words: currentParagraph,
+        ...(result.length === 0 && chapterTitle ? { chapterTitle } : {}),
+      });
     }
 
     return result;
@@ -133,15 +124,16 @@ export function TextDisplay({
             )}
             <p className="mb-4 text-foreground">
               {para.words.map((word) => (
-                <button
-                  key={word.index}
-                  type="button"
-                  data-word-index={word.index}
-                  onClick={() => handleWordClick(word.index)}
-                  className="word cursor-pointer border-none bg-transparent p-0 font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm"
-                >
-                  {word.text}{' '}
-                </button>
+                <span key={word.index} className="inline">
+                  <button
+                    type="button"
+                    data-word-index={word.index}
+                    onClick={() => handleWordClick(word.index)}
+                    className="word cursor-pointer border-none bg-transparent p-0 font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm"
+                  >
+                    {word.text}
+                  </button>{' '}
+                </span>
               ))}
             </p>
           </div>

@@ -41,7 +41,7 @@ export async function parsePdfFile(
   try {
     const metadata = await pdf.getMetadata();
     const infoTitle = (metadata?.info as Record<string, unknown>)?.['Title'];
-    if (typeof infoTitle === 'string' && infoTitle.trim().length > 0) {
+    if (typeof infoTitle === 'string' && isUsableTitle(infoTitle)) {
       title = infoTitle.trim();
     }
   } catch {
@@ -198,6 +198,18 @@ function buildChaptersFromBreaks(
   }
 
   return chapters.filter((ch) => ch.text.trim().length > 0);
+}
+
+/** Check if a PDF metadata title is meaningful (not a placeholder). */
+function isUsableTitle(title: string): boolean {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) return false;
+
+  const placeholders = [
+    'untitled', 'anonymous', '(anonymous)', 'unknown',
+    'untitled document', 'microsoft word', 'document',
+  ];
+  return !placeholders.includes(trimmed.toLowerCase());
 }
 
 /** Yield control back to the event loop */

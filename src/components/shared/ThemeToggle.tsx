@@ -4,14 +4,14 @@ import { useTheme } from '@/components/providers/ThemeProvider';
 
 const labels: Record<string, string> = {
   light: 'Switch to dark mode',
-  dark: 'Switch to system mode',
-  system: 'Switch to light mode',
+  dark: 'Switch to light mode',
+  system: 'Switch to dark mode',
 };
 
 const nextTheme: Record<string, 'light' | 'dark' | 'system'> = {
-  light: 'dark',
-  dark: 'system',
-  system: 'light',
+  system: 'dark',
+  dark: 'light',
+  light: 'system',
 };
 
 function SunIcon() {

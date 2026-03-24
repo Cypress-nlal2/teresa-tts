@@ -37,7 +37,7 @@ export function SpeedControl({
         <button
           type="button"
           onClick={onClose}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+          className="h-11 w-11 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
           aria-label="Close speed control"
         >
           <svg
@@ -75,7 +75,7 @@ export function SpeedControl({
             type="button"
             onClick={() => onSpeedChange(preset)}
             aria-label={`Set speed to ${preset}x`}
-            className={`h-8 px-3 rounded-lg text-xs font-medium transition-colors
+            className={`h-11 min-w-[44px] px-3 rounded-lg text-xs font-medium transition-colors
               focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
               ${
                 Math.abs(speed - preset) < 0.05

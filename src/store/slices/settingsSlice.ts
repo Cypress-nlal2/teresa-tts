@@ -9,7 +9,7 @@ export const createSettingsSlice: StateCreator<
   SettingsSlice
 > = (set) => ({
   theme: 'system',
-  touchGuardEnabled: true,
+  touchGuardEnabled: false,
 
   setTheme: (theme: ThemePreference) => set({ theme }),
 

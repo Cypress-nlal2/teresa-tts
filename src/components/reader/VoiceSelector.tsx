@@ -46,7 +46,7 @@ export function VoiceSelector({
           <button
             type="button"
             onClick={onClose}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
             aria-label="Close voice selector"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -69,7 +69,7 @@ export function VoiceSelector({
         <button
           type="button"
           onClick={onClose}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+          className="h-11 w-11 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
           aria-label="Close voice selector"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -154,7 +154,7 @@ function VoiceGroup({
                 e.stopPropagation();
                 onPreview(voice);
               }}
-              className="h-7 w-7 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-surface-hover transition-colors shrink-0"
+              className="h-11 w-11 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-surface-hover transition-colors shrink-0"
               aria-label={`Preview ${voice.name}`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

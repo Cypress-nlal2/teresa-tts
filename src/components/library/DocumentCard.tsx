@@ -98,6 +98,7 @@ export function DocumentCard({ document, onOpen, onDelete }: DocumentCardProps) 
 
   return (
     <article
+      data-testid="document-card"
       role="button"
       tabIndex={0}
       onClick={handleOpen}

@@ -129,6 +129,7 @@ export function UploadZone({ onFileSelected, disabled = false }: UploadZoneProps
 
   return (
     <div
+      data-testid="upload-zone"
       role="button"
       tabIndex={disabled ? -1 : 0}
       aria-label="Upload a document by dropping a file here or clicking Browse files"

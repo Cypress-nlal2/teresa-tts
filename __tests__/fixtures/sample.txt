@@ -1,0 +1,17 @@
+Chapter 1: The Beginning
+
+This is the first chapter of our test document. It contains multiple sentences that should be read aloud by the text-to-speech engine. The quick brown fox jumps over the lazy dog. Each word should be highlighted as it is spoken.
+
+The second paragraph of the first chapter provides additional content. This helps us test paragraph detection and word tokenization across paragraph boundaries. We need enough words here to properly test the chunking algorithm.
+
+Chapter 2: The Middle
+
+The second chapter begins here with fresh content. This section tests chapter navigation and the ability to skip between chapters. Users should be able to click on a chapter title and jump directly to it.
+
+When reading this chapter, the progress bar should update accordingly. The time remaining display should recalculate based on the current position and reading speed. Speed changes should take effect immediately.
+
+Chapter 3: The Conclusion
+
+This is the final chapter of our test document. When the reader reaches the end of this chapter, the document should be marked as finished. Playing a finished document should restart from the beginning.
+
+The last paragraph ensures we have enough content to test all features thoroughly. Thank you for using Teresa TTS with love.

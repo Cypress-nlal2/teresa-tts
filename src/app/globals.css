@@ -95,15 +95,8 @@ body {
   border-radius: 2px;
 }
 
-/* Reset outline for elements that handle their own focus styles */
-button:focus-visible,
-[role="button"]:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-[tabindex]:focus-visible {
-  outline: none;
-}
+/* Elements with custom focus-visible:ring classes handle their own focus styles.
+   The global :focus-visible outline (above) provides a fallback for all elements. */
 
 /* Skip link for keyboard users */
 .skip-link {

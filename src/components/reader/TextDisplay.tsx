@@ -86,6 +86,8 @@ export function TextDisplay({
         'ring-primary',
         'rounded-sm',
       );
+      highlightedRef.current.removeAttribute('data-active');
+      highlightedRef.current.removeAttribute('aria-current');
       highlightedRef.current = null;
     }
 
@@ -96,6 +98,8 @@ export function TextDisplay({
 
     if (el) {
       el.classList.add('bg-primary/20', 'ring-1', 'ring-primary', 'rounded-sm');
+      el.setAttribute('data-active', 'true');
+      el.setAttribute('aria-current', 'true');
       highlightedRef.current = el;
 
       // Auto-scroll into view
@@ -134,7 +138,7 @@ export function TextDisplay({
                   type="button"
                   data-word-index={word.index}
                   onClick={() => handleWordClick(word.index)}
-                  className="cursor-pointer border-none bg-transparent p-0 font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm"
+                  className="word cursor-pointer border-none bg-transparent p-0 font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm"
                 >
                   {word.text}{' '}
                 </button>

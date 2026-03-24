@@ -126,7 +126,7 @@ export function PlayerControls({
   );
 
   return (
-    <div className="safe-bottom sticky bottom-0 z-30 border-t border-border bg-surface/80 backdrop-blur-lg">
+    <div data-testid="player-controls" className="safe-bottom sticky bottom-0 z-30 border-t border-border bg-surface/80 backdrop-blur-lg">
       {/* Popover panels */}
       <div className="relative px-4">
         {showSpeedControl && (
@@ -191,7 +191,7 @@ export function PlayerControls({
             type="button"
             onClick={onChapterTitleClick}
             aria-label={`Current chapter: ${currentChapterTitle}. Click to see all chapters.`}
-            className="text-xs text-muted truncate max-w-[40%] hover:text-foreground transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            className="min-h-[44px] min-w-[44px] text-xs text-muted truncate max-w-[40%] hover:text-foreground transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded flex items-center"
           >
             {currentChapterTitle}
           </button>
@@ -206,7 +206,7 @@ export function PlayerControls({
                 setShowSpeedControl(!showSpeedControl);
               }}
               aria-label={`Playback speed: ${speed.toFixed(1)}x. Click to adjust.`}
-              className="text-xs text-muted hover:text-foreground transition-colors font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+              className="min-h-[44px] min-w-[44px] text-xs text-muted hover:text-foreground transition-colors font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded flex items-center justify-center"
             >
               {speed.toFixed(1)}x
             </button>
@@ -301,7 +301,7 @@ export function PlayerControls({
               setShowSpeedControl(false);
               setShowVoiceSelector(!showVoiceSelector);
             }}
-            className="h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="h-11 min-w-[44px] px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Select voice"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -320,7 +320,7 @@ export function PlayerControls({
               setShowVoiceSelector(false);
               setShowSpeedControl(!showSpeedControl);
             }}
-            className="h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="h-11 min-w-[44px] px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Adjust speed"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -334,7 +334,7 @@ export function PlayerControls({
           <button
             type="button"
             onClick={onToggleTouchGuard}
-            className={`h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs transition-colors
+            className={`h-11 min-w-[44px] px-3 flex items-center gap-1.5 rounded-lg text-xs transition-colors
               focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
               ${
                 touchGuardEnabled

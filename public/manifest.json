@@ -1,0 +1,10 @@
+{
+  "name": "Teresa TTS \u2665",
+  "short_name": "Teresa TTS",
+  "description": "Browser-based text-to-speech with word highlighting and chapter navigation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#6366f1",
+  "icons": []
+}

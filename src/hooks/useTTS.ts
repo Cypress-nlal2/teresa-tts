@@ -15,6 +15,10 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
   const wordIndexRef = useRef(0);
   const initializedRef = useRef(false);
 
+  // Pending seek: when we need to switch chapters then seek, store the target here.
+  // The useEffect that watches `words` will pick it up after chapter loads.
+  const pendingSeekRef = useRef<{ wordIndex: number; shouldPlay: boolean } | null>(null);
+
   const setPlaybackState = useAppStore((s) => s.setPlaybackState);
   const setCurrentWordIndex = useAppStore((s) => s.setCurrentWordIndex);
   const loadVoices = useAppStore((s) => s.loadVoices);
@@ -47,6 +51,29 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
       }, POSITION_SAVE_DEBOUNCE_MS);
     },
     [docId],
+  );
+
+  // Helper: find which chapter a global word index belongs to
+  const findChapterForWord = useCallback(
+    (wordIndex: number): number => {
+      for (let i = 0; i < chapters.length; i++) {
+        if (wordIndex >= chapters[i].startWordIndex && wordIndex <= chapters[i].endWordIndex) {
+          return i;
+        }
+      }
+      // If beyond last chapter, return last chapter
+      return chapters.length - 1;
+    },
+    [chapters],
+  );
+
+  // Helper: sync highlight position immediately
+  const syncPosition = useCallback(
+    (wordIndex: number) => {
+      wordIndexRef.current = wordIndex;
+      setCurrentWordIndex(wordIndex);
+    },
+    [setCurrentWordIndex],
   );
 
   // Create engine on mount
@@ -100,8 +127,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
       }
 
       engine.initialize(words, chapters, startIndex);
-      setCurrentWordIndex(startIndex);
-      wordIndexRef.current = startIndex;
+      syncPosition(startIndex);
 
       if (saved?.speed) {
         engine.setSpeed(saved.speed);
@@ -123,7 +149,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
         clearTimeout(saveTimerRef.current);
       }
     };
-  }, [words, chapters, docId, setPlaybackState, setCurrentWordIndex, debouncedSave, setSpeed, setVoice]);
+  }, [words, chapters, docId, setPlaybackState, setCurrentWordIndex, debouncedSave, setSpeed, setVoice, syncPosition]);
 
   // Load voices on mount with Safari fallback
   useEffect(() => {
@@ -132,7 +158,6 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       speechSynthesis.addEventListener('voiceschanged', loadVoices);
 
-      // Safari fallback: voices load late
       if (isSafari()) {
         const timer = setTimeout(loadVoices, 500);
         return () => {
@@ -161,11 +186,16 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     }
   }, [selectedVoiceURI]);
 
-  // Re-initialize engine when words change (chapter change)
+  // Re-initialize engine when words change (chapter change).
+  // Also apply any pending seek that was queued before the chapter loaded.
   useEffect(() => {
     if (engineRef.current && initializedRef.current && words.length > 0) {
-      const wasPlaying = useAppStore.getState().playbackState === 'playing';
-      engineRef.current.initialize(words, chapters, words[0]?.index ?? 0);
+      const pending = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+
+      const startAt = pending ? pending.wordIndex : (words[0]?.index ?? 0);
+
+      engineRef.current.initialize(words, chapters, startAt);
 
       if (useAppStore.getState().speed !== 1) {
         engineRef.current.setSpeed(useAppStore.getState().speed);
@@ -174,14 +204,12 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
         engineRef.current.setVoice(useAppStore.getState().selectedVoiceURI!);
       }
 
-      setCurrentWordIndex(words[0]?.index ?? 0);
-      wordIndexRef.current = words[0]?.index ?? 0;
+      syncPosition(startAt);
 
-      if (wasPlaying) {
+      if (pending?.shouldPlay) {
         engineRef.current.play();
       }
     }
-    // Only re-run when words identity changes (chapter navigation)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [words]);
 
@@ -198,22 +226,26 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
       };
       await saveReadingState(resetState);
 
-      // Reset to chapter 0 if not already there
       const store = useAppStore.getState();
       if (store.currentChapterIndex !== 0) {
+        pendingSeekRef.current = { wordIndex: 0, shouldPlay: true };
         await store.setChapter(0);
+        return; // useEffect on words change will handle play
       } else {
         engineRef.current.seekToWord(words[0]?.index ?? 0);
-        setCurrentWordIndex(words[0]?.index ?? 0);
-        wordIndexRef.current = words[0]?.index ?? 0;
+        syncPosition(words[0]?.index ?? 0);
       }
     }
     engineRef.current?.play();
-  }, [docId, words, setCurrentWordIndex]);
+  }, [docId, words, syncPosition]);
 
   const pause = useCallback(() => {
     engineRef.current?.pause();
-  }, []);
+    // Engine's pause() now calls onWordChange, but also sync here for safety
+    if (engineRef.current) {
+      syncPosition(engineRef.current.getCurrentWordIndex());
+    }
+  }, [syncPosition]);
 
   const resume = useCallback(() => {
     engineRef.current?.play();
@@ -221,78 +253,84 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
 
   const stop = useCallback(() => {
     engineRef.current?.stop();
-  }, []);
+    syncPosition(0);
+  }, [syncPosition]);
 
-  const seekToWord = useCallback((wordIndex: number) => {
-    // Check if target word is in a different chapter
-    const store = useAppStore.getState();
-    for (let i = 0; i < chapters.length; i++) {
-      const ch = chapters[i];
-      if (wordIndex >= ch.startWordIndex && wordIndex <= ch.endWordIndex) {
-        if (i !== store.currentChapterIndex) {
-          // Need to switch chapters first — engine will re-init via useEffect
-          store.setChapter(i).then(() => {
-            // After chapter loads, seek within it
-            engineRef.current?.seekToWord(wordIndex);
-          });
-          return;
-        }
-        break;
-      }
-    }
-    engineRef.current?.seekToWord(wordIndex);
-  }, [chapters]);
+  const seekToWord = useCallback(
+    (wordIndex: number) => {
+      const targetChapter = findChapterForWord(wordIndex);
+      const store = useAppStore.getState();
 
-  const skipForward = useCallback((wordCount: number) => {
-    const targetIndex = (engineRef.current?.getCurrentWordIndex() ?? 0) + wordCount;
-    const store = useAppStore.getState();
-    for (let i = 0; i < chapters.length; i++) {
-      const ch = chapters[i];
-      if (targetIndex >= ch.startWordIndex && targetIndex <= ch.endWordIndex) {
-        if (i !== store.currentChapterIndex) {
-          const wasPlaying = store.playbackState === 'playing';
-          store.setChapter(i).then(() => {
-            engineRef.current?.seekToWord(targetIndex);
-            if (wasPlaying) {
-              engineRef.current?.play();
-            }
-          });
-          return;
-        }
-        break;
+      if (targetChapter !== store.currentChapterIndex) {
+        // Queue the seek and switch chapters — useEffect will apply it
+        pendingSeekRef.current = {
+          wordIndex,
+          shouldPlay: store.playbackState === 'playing',
+        };
+        // Pause first so we don't have stale playback
+        engineRef.current?.pause();
+        store.setChapter(targetChapter);
+      } else {
+        engineRef.current?.seekToWord(wordIndex);
+        syncPosition(wordIndex);
       }
-    }
-    engineRef.current?.skipForward(wordCount);
-  }, [chapters]);
+    },
+    [findChapterForWord, syncPosition],
+  );
 
-  const skipBackward = useCallback((wordCount: number) => {
-    const targetIndex = (engineRef.current?.getCurrentWordIndex() ?? 0) - wordCount;
-    const clampedTarget = Math.max(0, targetIndex);
-    const store = useAppStore.getState();
-    for (let i = 0; i < chapters.length; i++) {
-      const ch = chapters[i];
-      if (clampedTarget >= ch.startWordIndex && clampedTarget <= ch.endWordIndex) {
-        if (i !== store.currentChapterIndex) {
-          const wasPlaying = store.playbackState === 'playing';
-          store.setChapter(i).then(() => {
-            engineRef.current?.seekToWord(clampedTarget);
-            if (wasPlaying) {
-              engineRef.current?.play();
-            }
-          });
-          return;
-        }
-        break;
+  const skipForward = useCallback(
+    (wordCount: number) => {
+      const currentIdx = engineRef.current?.getCurrentWordIndex() ?? 0;
+      const targetIndex = Math.min(currentIdx + wordCount, (chapters[chapters.length - 1]?.endWordIndex ?? 0));
+      const targetChapter = findChapterForWord(targetIndex);
+      const store = useAppStore.getState();
+
+      if (targetChapter !== store.currentChapterIndex) {
+        pendingSeekRef.current = {
+          wordIndex: targetIndex,
+          shouldPlay: store.playbackState === 'playing',
+        };
+        engineRef.current?.pause();
+        store.setChapter(targetChapter);
+      } else {
+        engineRef.current?.seekToWord(targetIndex);
+        syncPosition(targetIndex);
       }
-    }
-    engineRef.current?.skipBackward(wordCount);
-  }, [chapters]);
+    },
+    [chapters, findChapterForWord, syncPosition],
+  );
+
+  const skipBackward = useCallback(
+    (wordCount: number) => {
+      const currentIdx = engineRef.current?.getCurrentWordIndex() ?? 0;
+      const targetIndex = Math.max(currentIdx - wordCount, 0);
+      const targetChapter = findChapterForWord(targetIndex);
+      const store = useAppStore.getState();
+
+      if (targetChapter !== store.currentChapterIndex) {
+        pendingSeekRef.current = {
+          wordIndex: targetIndex,
+          shouldPlay: store.playbackState === 'playing',
+        };
+        engineRef.current?.pause();
+        store.setChapter(targetChapter);
+      } else {
+        engineRef.current?.seekToWord(targetIndex);
+        syncPosition(targetIndex);
+      }
+    },
+    [findChapterForWord, syncPosition],
+  );
 
   const changeSpeed = useCallback(
     (newSpeed: number) => {
       setSpeed(newSpeed);
+      // Speed change restarts utterance in engine, confirm position
+      if (engineRef.current) {
+        syncPosition(engineRef.current.getCurrentWordIndex());
+      }
     },
-    [setSpeed],
+    [setSpeed, syncPosition],
   );
 
   const changeVoice = useCallback(

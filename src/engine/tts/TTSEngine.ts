@@ -75,6 +75,9 @@ export class TTSEngine {
       // Desktop resume via speechSynthesis.resume()
       this.getSynth()?.resume();
       this.setPlaybackState('playing');
+      // Confirm position and restart tracking
+      this.callbacks.onWordChange(this.currentWordIndex);
+      this.utteranceStartTime = Date.now();
       this.startBoundaryFallbackTimer();
       return;
     }
@@ -99,6 +102,8 @@ export class TTSEngine {
       this.getSynth()?.pause();
     }
 
+    // Always confirm current position on pause so highlight stays in sync
+    this.callbacks.onWordChange(this.currentWordIndex);
     this.setPlaybackState('paused');
   }
 
@@ -221,9 +226,12 @@ export class TTSEngine {
     }
 
     this.useBoundaryEvents = this.platformConfig.hasBoundaryEvents;
+    this.chunkBuilder = new ChunkBuilder(); // Reset chunk IDs for clean state
     this.currentChunk = this.chunkBuilder.buildChunk(this.words, this.currentWordIndex);
     this.nextChunk = null;
 
+    // Confirm position before speaking so highlight is immediately correct
+    this.callbacks.onWordChange(this.currentWordIndex);
     this.speakChunk(this.currentChunk);
     this.setPlaybackState('playing');
   }

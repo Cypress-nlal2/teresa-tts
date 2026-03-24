@@ -10,6 +10,7 @@ import { DocumentCard } from '@/components/library/DocumentCard';
 import { ParsingOverlay } from '@/components/library/ParsingOverlay';
 import { EmptyState } from '@/components/library/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { checkStorageAvailability } from '@/lib/storageCheck';
 import type { DocumentMeta } from '@/types';
 
 export function LibraryView() {
@@ -23,6 +24,16 @@ export function LibraryView() {
 
   const [sortedDocuments, setSortedDocuments] = useState<DocumentMeta[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<DocumentMeta | null>(null);
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
+
+  // Check storage on mount
+  useEffect(() => {
+    checkStorageAvailability().then((result) => {
+      if (!result.available) {
+        setStorageUnavailable(true);
+      }
+    });
+  }, []);
 
   // Load documents on mount
   useEffect(() => {
@@ -69,11 +80,22 @@ export function LibraryView() {
     };
   }, [documents]);
 
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+
   const handleFileSelected = useCallback(
     (file: File) => {
+      if (file.size > MAX_FILE_SIZE) {
+        setParsingState({
+          isActive: false,
+          fileName: file.name,
+          progress: 0,
+          error: `File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum supported size is 100 MB.`,
+        });
+        return;
+      }
       parseFile(file);
     },
-    [parseFile],
+    [parseFile, setParsingState],
   );
 
   const handleOpenDocument = useCallback(
@@ -117,8 +139,26 @@ export function LibraryView() {
 
   return (
     <div className="space-y-6">
+      {/* Storage unavailable warning */}
+      {storageUnavailable && (
+        <div
+          role="alert"
+          className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-center"
+        >
+          <p className="text-sm font-medium text-danger">
+            Storage is not available
+          </p>
+          <p className="text-xs text-muted mt-1">
+            You may be in private/incognito browsing mode. Documents cannot be
+            saved. Please use a regular browser window.
+          </p>
+        </div>
+      )}
+
       {/* Upload zone */}
-      <UploadZone onFileSelected={handleFileSelected} disabled={isParsing} />
+      {!storageUnavailable && (
+        <UploadZone onFileSelected={handleFileSelected} disabled={isParsing} />
+      )}
 
       {/* Parsing overlay */}
       {showOverlay && (

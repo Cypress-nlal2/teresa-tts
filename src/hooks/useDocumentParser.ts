@@ -57,8 +57,25 @@ export function useDocumentParser() {
           error: null,
         });
       } catch (err) {
-        const message =
+        let message =
           err instanceof Error ? err.message : 'An unexpected error occurred';
+
+        // Detect quota exceeded errors
+        if (
+          err instanceof DOMException &&
+          (err.name === 'QuotaExceededError' || err.code === 22)
+        ) {
+          message =
+            'Storage quota exceeded. Try deleting some old documents to free up space.';
+        }
+
+        // Detect empty / corrupted documents
+        if (message.toLowerCase().includes('no text') ||
+            message.toLowerCase().includes('empty') ||
+            message.toLowerCase().includes('corrupt')) {
+          message = `Could not read "${file.name}". The file may be empty, corrupted, or password-protected.`;
+        }
+
         setParsingState({
           error: message,
           progress: 0,

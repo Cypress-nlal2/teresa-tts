@@ -185,9 +185,31 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [words]);
 
-  const play = useCallback(() => {
+  const play = useCallback(async () => {
+    // If the document is finished, reset to beginning
+    const saved = await getReadingState(docId);
+    if (saved?.isFinished && engineRef.current) {
+      const resetState: ReadingState = {
+        ...saved,
+        isFinished: false,
+        currentWordIndex: 0,
+        currentChapterIndex: 0,
+        lastReadAt: Date.now(),
+      };
+      await saveReadingState(resetState);
+
+      // Reset to chapter 0 if not already there
+      const store = useAppStore.getState();
+      if (store.currentChapterIndex !== 0) {
+        await store.setChapter(0);
+      } else {
+        engineRef.current.seekToWord(words[0]?.index ?? 0);
+        setCurrentWordIndex(words[0]?.index ?? 0);
+        wordIndexRef.current = words[0]?.index ?? 0;
+      }
+    }
     engineRef.current?.play();
-  }, []);
+  }, [docId, words, setCurrentWordIndex]);
 
   const pause = useCallback(() => {
     engineRef.current?.pause();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useAppStore } from '@/store';
 import { useTTS } from '@/hooks/useTTS';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -16,6 +16,13 @@ interface ReaderViewProps {
 
 export function ReaderView({ document: doc }: ReaderViewProps) {
   const [chapterNavOpen, setChapterNavOpen] = useState(false);
+  const [noTTSAvailable, setNoTTSAvailable] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !('speechSynthesis' in window)) {
+      setNoTTSAvailable(true);
+    }
+  }, []);
 
   const currentChapterWords = useAppStore((s) => s.currentChapterWords);
   const currentChapterIndex = useAppStore((s) => s.currentChapterIndex);
@@ -101,6 +108,12 @@ export function ReaderView({ document: doc }: ReaderViewProps) {
   return (
     <div className="flex flex-col h-dvh">
       <Header showBack />
+
+      {noTTSAvailable && (
+        <div role="alert" className="mx-4 mt-2 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+          Text-to-speech is not available in this browser. Please use a supported browser (Chrome, Safari, Edge, or Firefox).
+        </div>
+      )}
 
       <TextDisplay
         words={currentChapterWords}

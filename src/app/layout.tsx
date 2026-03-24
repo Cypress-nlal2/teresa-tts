@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { ThemeProvider, themeScript } from '@/components/providers/ThemeProvider';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { SafariBanner } from '@/components/shared/SafariBanner';
 import './globals.css';
 
 const geistSans = Geist({
@@ -46,7 +47,11 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full flex flex-col">
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
         <ThemeProvider>
+          <SafariBanner />
           <ErrorBoundary>{children}</ErrorBoundary>
         </ThemeProvider>
       </body>

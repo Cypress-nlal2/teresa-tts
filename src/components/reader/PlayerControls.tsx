@@ -36,8 +36,12 @@ interface PlayerControlsProps {
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
-  const m = Math.floor(seconds / 60);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
@@ -150,11 +154,23 @@ export function PlayerControls({
         className="h-3 cursor-pointer group px-0"
         onClick={handleProgressClick}
         onPointerDown={handleProgressDrag}
-        role="progressbar"
-        aria-valuenow={Math.round(progress * 100)}
+        role="slider"
+        aria-valuenow={currentWordIndex}
         aria-valuemin={0}
-        aria-valuemax={100}
+        aria-valuemax={totalWords}
         aria-label="Reading progress"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            e.stopPropagation();
+            onSkipForward(SKIP_FORWARD_WORDS);
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            e.stopPropagation();
+            onSkipBackward(SKIP_BACKWARD_WORDS);
+          }
+        }}
       >
         <div className="relative h-full bg-border/50">
           <div
@@ -174,7 +190,8 @@ export function PlayerControls({
           <button
             type="button"
             onClick={onChapterTitleClick}
-            className="text-xs text-muted truncate max-w-[40%] hover:text-foreground transition-colors text-left"
+            aria-label={`Current chapter: ${currentChapterTitle}. Click to see all chapters.`}
+            className="text-xs text-muted truncate max-w-[40%] hover:text-foreground transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
           >
             {currentChapterTitle}
           </button>
@@ -188,7 +205,8 @@ export function PlayerControls({
                 setShowVoiceSelector(false);
                 setShowSpeedControl(!showSpeedControl);
               }}
-              className="text-xs text-muted hover:text-foreground transition-colors font-medium tabular-nums"
+              aria-label={`Playback speed: ${speed.toFixed(1)}x. Click to adjust.`}
+              className="text-xs text-muted hover:text-foreground transition-colors font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
             >
               {speed.toFixed(1)}x
             </button>
@@ -202,7 +220,7 @@ export function PlayerControls({
             type="button"
             onClick={onPrevChapter}
             disabled={currentChapterIndex === 0}
-            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground disabled:opacity-30 transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Previous chapter"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -215,7 +233,7 @@ export function PlayerControls({
           <button
             type="button"
             onClick={() => onSkipBackward(SKIP_BACKWARD_WORDS)}
-            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Skip backward"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -229,7 +247,7 @@ export function PlayerControls({
             type="button"
             onClick={handlePlayPause}
             disabled={playbackState === 'loading'}
-            className="h-14 w-14 flex items-center justify-center rounded-full bg-primary text-white hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-md"
+            className="h-14 w-14 flex items-center justify-center rounded-full bg-primary text-white hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {playbackState === 'loading' ? (
@@ -250,7 +268,7 @@ export function PlayerControls({
           <button
             type="button"
             onClick={() => onSkipForward(SKIP_FORWARD_WORDS)}
-            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Skip forward"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -264,7 +282,7 @@ export function PlayerControls({
             type="button"
             onClick={onNextChapter}
             disabled={currentChapterIndex >= chapters.length - 1}
-            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground disabled:opacity-30 transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-full text-muted hover:text-foreground disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Next chapter"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -283,7 +301,7 @@ export function PlayerControls({
               setShowSpeedControl(false);
               setShowVoiceSelector(!showVoiceSelector);
             }}
-            className="h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+            className="h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Select voice"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -302,7 +320,7 @@ export function PlayerControls({
               setShowVoiceSelector(false);
               setShowSpeedControl(!showSpeedControl);
             }}
-            className="h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+            className="h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Adjust speed"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -317,6 +335,7 @@ export function PlayerControls({
             type="button"
             onClick={onToggleTouchGuard}
             className={`h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs transition-colors
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
               ${
                 touchGuardEnabled
                   ? 'text-primary bg-primary/10'

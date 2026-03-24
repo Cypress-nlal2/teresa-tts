@@ -74,7 +74,9 @@ export function SpeedControl({
             key={preset}
             type="button"
             onClick={() => onSpeedChange(preset)}
+            aria-label={`Set speed to ${preset}x`}
             className={`h-8 px-3 rounded-lg text-xs font-medium transition-colors
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
               ${
                 Math.abs(speed - preset) < 0.05
                   ? 'bg-primary text-white'

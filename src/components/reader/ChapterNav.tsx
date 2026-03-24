@@ -66,7 +66,10 @@ export function ChapterNav({
                 onChapterSelect(index);
                 onClose();
               }}
+              aria-label={`Chapter ${index + 1}: ${chapter.title}`}
+              aria-current={index === currentChapterIndex ? 'true' : undefined}
               className={`w-full text-left px-3 py-3 rounded-lg text-sm transition-colors mb-0.5
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
                 ${
                   index === currentChapterIndex
                     ? 'bg-primary/10 text-primary font-medium'

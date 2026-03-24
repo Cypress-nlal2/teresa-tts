@@ -116,8 +116,29 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
 
     // Restore position from saved state
     async function initEngine() {
+      // Check for a pending seek (e.g. cross-chapter skip) before reading
+      // saved state. The pending seek takes priority because the user just
+      // requested it, and the saved position may reference a different chapter.
+      const pending = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+
       const saved = await getReadingState(docId);
-      const startIndex = saved?.currentWordIndex ?? 0;
+      let startIndex: number;
+
+      if (pending) {
+        startIndex = pending.wordIndex;
+      } else {
+        startIndex = saved?.currentWordIndex ?? 0;
+      }
+
+      // Ensure startIndex falls within the current chapter's word range.
+      // When a chapter changes, the saved position may belong to a different
+      // chapter whose words are no longer loaded in the DOM.
+      const firstWordIndex = words[0]?.index ?? 0;
+      const lastWordIndex = words[words.length - 1]?.index ?? 0;
+      if (startIndex < firstWordIndex || startIndex > lastWordIndex) {
+        startIndex = firstWordIndex;
+      }
 
       if (saved?.speed) {
         setSpeed(saved.speed);
@@ -137,6 +158,10 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
       }
 
       initializedRef.current = true;
+
+      if (pending?.shouldPlay) {
+        engine.play();
+      }
     }
 
     initEngine();

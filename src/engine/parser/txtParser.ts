@@ -25,7 +25,9 @@ export async function parseTxtFile(file: File): Promise<ParsedDocument> {
 
     if (words.length > 0) {
       chapters.push({ title, startWordIndex, endWordIndex });
-      allWords.push(...words);
+      for (let j = 0; j < words.length; j++) {
+        allWords.push(words[j]);
+      }
       globalIndex += words.length;
     }
   }

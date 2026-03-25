@@ -405,7 +405,7 @@ export class TTSEngine {
     // Only use Safari end timer on platforms that use cancel-for-pause (Safari/Android)
     if (!this.platformConfig.useCancelForPause) return;
 
-    const timeout = chunk.text.length * 100 + 5000;
+    const timeout = (chunk.text.length * 100 / this.rate) + 5000;
 
     this.safariEndTimer = setTimeout(() => {
       if (this.playbackState === 'playing' && !this.isDestroyed) {

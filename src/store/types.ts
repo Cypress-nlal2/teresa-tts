@@ -45,18 +45,10 @@ export interface TTSSlice {
   selectedVoiceURI: string | null;
   availableVoices: SpeechSynthesisVoice[];
 
-  play: () => void;
-  pause: () => void;
-  resume: () => void;
-  seekToWord: (wordIndex: number) => void;
-  skipForward: () => void;
-  skipBackward: () => void;
-  skipChapterForward: () => void;
-  skipChapterBackward: () => void;
+  setPlaybackState: (state: PlaybackState) => void;
+  setCurrentWordIndex: (index: number) => void;
   setSpeed: (speed: number) => void;
   setVoice: (voiceURI: string) => void;
-  setCurrentWordIndex: (index: number) => void;
-  setPlaybackState: (state: PlaybackState) => void;
   loadVoices: () => void;
 }
 

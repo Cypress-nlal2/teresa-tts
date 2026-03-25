@@ -76,103 +76,144 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     [setCurrentWordIndex],
   );
 
-  // Create engine on mount
+  // Track whether this is the first mount
+  const mountedRef = useRef(false);
+
+  // Single consolidated effect for engine creation and chapter changes
   useEffect(() => {
     if (words.length === 0) return;
 
-    const platformConfig = getPlatformTTSStrategy();
+    // On first mount: create the engine and restore saved state
+    if (!mountedRef.current) {
+      mountedRef.current = true;
 
-    const callbacks: TTSCallbacks = {
-      onWordChange: (wordIndex: number) => {
-        wordIndexRef.current = wordIndex;
-        setCurrentWordIndex(wordIndex);
-        debouncedSave(wordIndex);
-      },
-      onPlaybackStateChange: (state) => {
-        setPlaybackState(state);
-      },
-      onChunkComplete: () => {
-        // No additional handling needed
-      },
-      onFinished: () => {
-        const readingState: ReadingState = {
-          docId,
-          currentWordIndex: wordIndexRef.current,
-          currentChapterIndex: useAppStore.getState().currentChapterIndex,
-          speed: useAppStore.getState().speed,
-          voiceURI: useAppStore.getState().selectedVoiceURI,
-          lastReadAt: Date.now(),
-          isFinished: true,
-        };
-        saveReadingState(readingState);
-      },
-      onError: (error: string) => {
-        console.error('[TTS Error]', error);
-      },
-    };
+      const platformConfig = getPlatformTTSStrategy();
 
-    const engine = new TTSEngine(callbacks, platformConfig);
-    engineRef.current = engine;
+      const callbacks: TTSCallbacks = {
+        onWordChange: (wordIndex: number) => {
+          wordIndexRef.current = wordIndex;
+          setCurrentWordIndex(wordIndex);
+          debouncedSave(wordIndex);
+        },
+        onPlaybackStateChange: (state) => {
+          setPlaybackState(state);
+        },
+        onChunkComplete: () => {
+          // No additional handling needed
+        },
+        onFinished: () => {
+          const readingState: ReadingState = {
+            docId,
+            currentWordIndex: wordIndexRef.current,
+            currentChapterIndex: useAppStore.getState().currentChapterIndex,
+            speed: useAppStore.getState().speed,
+            voiceURI: useAppStore.getState().selectedVoiceURI,
+            lastReadAt: Date.now(),
+            isFinished: true,
+          };
+          saveReadingState(readingState);
+        },
+        onError: (error: string) => {
+          console.error('[TTS Error]', error);
+        },
+      };
 
-    // Restore position from saved state
-    async function initEngine() {
-      // Check for a pending seek (e.g. cross-chapter skip) before reading
-      // saved state. The pending seek takes priority because the user just
-      // requested it, and the saved position may reference a different chapter.
+      const engine = new TTSEngine(callbacks, platformConfig);
+      engineRef.current = engine;
+
+      // Restore position from saved state
+      async function initEngine() {
+        const pending = pendingSeekRef.current;
+        pendingSeekRef.current = null;
+
+        const saved = await getReadingState(docId);
+        let startIndex: number;
+
+        if (pending) {
+          startIndex = pending.wordIndex;
+        } else {
+          startIndex = saved?.currentWordIndex ?? 0;
+        }
+
+        // Ensure startIndex falls within the current chapter's word range.
+        const firstWordIndex = words[0]?.index ?? 0;
+        const lastWordIndex = words[words.length - 1]?.index ?? 0;
+        if (startIndex < firstWordIndex || startIndex > lastWordIndex) {
+          startIndex = firstWordIndex;
+        }
+
+        if (saved?.speed) {
+          setSpeed(saved.speed);
+        }
+        if (saved?.voiceURI) {
+          setVoice(saved.voiceURI);
+        }
+
+        engine.initialize(words, chapters, startIndex);
+        syncPosition(startIndex);
+
+        if (saved?.speed) {
+          engine.setSpeed(saved.speed);
+        }
+        if (saved?.voiceURI) {
+          engine.setVoice(saved.voiceURI);
+        }
+
+        initializedRef.current = true;
+
+        if (pending?.shouldPlay) {
+          engine.play();
+        }
+      }
+
+      initEngine();
+    } else if (engineRef.current && initializedRef.current) {
+      // Subsequent words changes (chapter navigation): re-initialize existing engine
       const pending = pendingSeekRef.current;
       pendingSeekRef.current = null;
 
-      const saved = await getReadingState(docId);
-      let startIndex: number;
+      const startAt = pending ? pending.wordIndex : (words[0]?.index ?? 0);
 
-      if (pending) {
-        startIndex = pending.wordIndex;
-      } else {
-        startIndex = saved?.currentWordIndex ?? 0;
+      engineRef.current.initialize(words, chapters, startAt);
+
+      if (useAppStore.getState().speed !== 1) {
+        engineRef.current.setSpeed(useAppStore.getState().speed);
+      }
+      if (useAppStore.getState().selectedVoiceURI) {
+        engineRef.current.setVoice(useAppStore.getState().selectedVoiceURI!);
       }
 
-      // Ensure startIndex falls within the current chapter's word range.
-      // When a chapter changes, the saved position may belong to a different
-      // chapter whose words are no longer loaded in the DOM.
-      const firstWordIndex = words[0]?.index ?? 0;
-      const lastWordIndex = words[words.length - 1]?.index ?? 0;
-      if (startIndex < firstWordIndex || startIndex > lastWordIndex) {
-        startIndex = firstWordIndex;
-      }
-
-      if (saved?.speed) {
-        setSpeed(saved.speed);
-      }
-      if (saved?.voiceURI) {
-        setVoice(saved.voiceURI);
-      }
-
-      engine.initialize(words, chapters, startIndex);
-      syncPosition(startIndex);
-
-      if (saved?.speed) {
-        engine.setSpeed(saved.speed);
-      }
-      if (saved?.voiceURI) {
-        engine.setVoice(saved.voiceURI);
-      }
-
-      initializedRef.current = true;
+      syncPosition(startAt);
 
       if (pending?.shouldPlay) {
-        engine.play();
+        engineRef.current.play();
       }
     }
 
-    initEngine();
-
     return () => {
-      engine.destroy();
-      engineRef.current = null;
-      initializedRef.current = false;
+      // Flush any pending position save before cleanup
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
       }
+      // Final save with current position
+      const finalState: ReadingState = {
+        docId,
+        currentWordIndex: wordIndexRef.current,
+        currentChapterIndex: useAppStore.getState().currentChapterIndex,
+        speed: useAppStore.getState().speed,
+        voiceURI: useAppStore.getState().selectedVoiceURI,
+        lastReadAt: Date.now(),
+        isFinished: false,
+      };
+      saveReadingState(finalState);
+
+      if (engineRef.current) {
+        engineRef.current.destroy();
+        engineRef.current = null;
+      }
+      initializedRef.current = false;
+      mountedRef.current = false;
     };
   }, [words, chapters, docId, setPlaybackState, setCurrentWordIndex, debouncedSave, setSpeed, setVoice, syncPosition]);
 
@@ -211,32 +252,6 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     }
   }, [selectedVoiceURI]);
 
-  // Re-initialize engine when words change (chapter change).
-  // Also apply any pending seek that was queued before the chapter loaded.
-  useEffect(() => {
-    if (engineRef.current && initializedRef.current && words.length > 0) {
-      const pending = pendingSeekRef.current;
-      pendingSeekRef.current = null;
-
-      const startAt = pending ? pending.wordIndex : (words[0]?.index ?? 0);
-
-      engineRef.current.initialize(words, chapters, startAt);
-
-      if (useAppStore.getState().speed !== 1) {
-        engineRef.current.setSpeed(useAppStore.getState().speed);
-      }
-      if (useAppStore.getState().selectedVoiceURI) {
-        engineRef.current.setVoice(useAppStore.getState().selectedVoiceURI!);
-      }
-
-      syncPosition(startAt);
-
-      if (pending?.shouldPlay) {
-        engineRef.current.play();
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words]);
 
   const play = useCallback(async () => {
     if (!engineRef.current) return;

@@ -16,9 +16,3 @@ export interface TTSCallbacks {
   onError: (error: string) => void;
 }
 
-export interface PlatformTTSConfig {
-  useCancelForPause: boolean;
-  hasBoundaryEvents: boolean;
-  maxRate: number;
-  minRate: number;
-}

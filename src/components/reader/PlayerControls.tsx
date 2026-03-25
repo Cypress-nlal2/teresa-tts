@@ -7,7 +7,6 @@ import {
   SKIP_BACKWARD_WORDS,
   WORDS_PER_MINUTE_BASE,
 } from '@/lib/constants';
-import { getPlatformTTSStrategy } from '@/lib/platformDetector';
 import { SpeedControl } from './SpeedControl';
 import { VoiceSelector } from './VoiceSelector';
 
@@ -32,6 +31,8 @@ interface PlayerControlsProps {
   onVoiceChange: (uri: string) => void;
   onToggleTouchGuard: () => void;
   onChapterTitleClick: () => void;
+  minRate: number;
+  maxRate: number;
 }
 
 function formatTime(seconds: number): string {
@@ -66,12 +67,13 @@ export function PlayerControls({
   onVoiceChange,
   onToggleTouchGuard,
   onChapterTitleClick,
+  minRate,
+  maxRate,
 }: PlayerControlsProps) {
   const [showSpeedControl, setShowSpeedControl] = useState(false);
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
-  const platform = useMemo(() => getPlatformTTSStrategy(), []);
 
   const progress = totalWords > 0 ? currentWordIndex / totalWords : 0;
 
@@ -133,8 +135,8 @@ export function PlayerControls({
           <SpeedControl
             speed={speed}
             onSpeedChange={onSpeedChange}
-            minSpeed={platform.minRate}
-            maxSpeed={platform.maxRate}
+            minSpeed={minRate}
+            maxSpeed={maxRate}
             onClose={() => setShowSpeedControl(false)}
           />
         )}

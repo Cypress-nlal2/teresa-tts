@@ -1,17 +1,39 @@
 import type { Word, Chapter, PlaybackState } from '@/types';
-import type { TTSCallbacks, PlatformTTSConfig, UtteranceChunk } from './types';
+import type { TTSCallbacks, UtteranceChunk } from './types';
 import { ChunkBuilder } from './ChunkBuilder';
 import { BoundaryTracker } from './BoundaryTracker';
 import { WORDS_PER_MINUTE_BASE } from '@/lib/constants';
 
-export class TTSEngine {
+/**
+ * Abstract base class for the TTS engine.
+ *
+ * Contains all common TTS logic: chunking, utterance management, timers,
+ * highlight tracking, and playback control. Platform-specific behavior
+ * is defined by protected getters that subclasses override.
+ */
+export abstract class TTSEngineBase {
+  // ─── Platform-specific getters (override in subclasses) ─────────
+
+  /** Whether this platform fires reliable boundary events with charIndex. */
+  protected get hasBoundaryEvents(): boolean { return true; }
+
+  /** Whether to use the Safari/Android end-timer fallback for unreliable onend. */
+  protected get needsSafariEndTimer(): boolean { return false; }
+
+  /** Minimum speech rate for this platform. */
+  get minRate(): number { return 0.5; }
+
+  /** Maximum speech rate for this platform. */
+  get maxRate(): number { return 3.0; }
+
+  // ─── Private state ──────────────────────────────────────────────
+
   private callbacks: TTSCallbacks;
-  private platformConfig: PlatformTTSConfig;
 
   private words: Word[] = [];
   private chapters: Chapter[] = [];
 
-  private currentWordIndex = 0;
+  private _currentWordIndex = 0;
   private playbackState: PlaybackState = 'idle';
 
   private chunkBuilder: ChunkBuilder;
@@ -29,35 +51,30 @@ export class TTSEngine {
   private safariEndTimer: ReturnType<typeof setTimeout> | null = null;
   private boundaryFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private utteranceStartTime = 0;
-  private useBoundaryEvents = true;
+  private useBoundaryEventsFlag = true;
 
   private documentFinished = false;
   private isDestroyed = false;
 
   private boundVisibilityHandler: (() => void) | null = null;
 
-  constructor(callbacks: TTSCallbacks, platformConfig: PlatformTTSConfig) {
+  constructor(callbacks: TTSCallbacks) {
     this.callbacks = callbacks;
-    this.platformConfig = platformConfig;
     this.chunkBuilder = new ChunkBuilder();
     this.boundaryTracker = new BoundaryTracker();
   }
 
-  /**
-   * Load document data and optionally set a starting word index.
-   */
+  // ─── Public API ─────────────────────────────────────────────────
+
   initialize(words: Word[], chapters: Chapter[], startWordIndex?: number): void {
     this.words = words;
     this.chapters = chapters;
-    this.currentWordIndex = startWordIndex ?? 0;
+    this._currentWordIndex = startWordIndex ?? 0;
     this.documentFinished = false;
     this.setPlaybackState('idle');
     this.setupVisibilityListener();
   }
 
-  /**
-   * Start or resume playback.
-   */
   play(): void {
     if (this.isDestroyed || this.words.length === 0) return;
     if (!this.isSpeechSynthesisAvailable()) {
@@ -66,58 +83,42 @@ export class TTSEngine {
     }
 
     if (this.documentFinished) {
-      // Restart from beginning if finished
-      this.currentWordIndex = 0;
+      this._currentWordIndex = 0;
       this.documentFinished = false;
     }
 
-    // Always start fresh from current position (cancel-for-pause on all platforms)
     this.speakFromCurrentPosition();
   }
 
-  /**
-   * Pause playback using the platform-appropriate strategy.
-   */
   pause(): void {
     if (this.playbackState !== 'playing') return;
 
     this.clearAllTimers();
 
-    // Snapshot position BEFORE cancelling — boundary events can still fire
+    // Snapshot position BEFORE cancelling — boundary events can fire
     // between cancel() and state update, causing the position to jump.
-    const savedPosition = this.currentWordIndex;
+    const savedPosition = this._currentWordIndex;
 
-    // Always use cancel-for-pause on ALL platforms. speechSynthesis.pause()/
-    // resume() is unreliable — boundary events desync, position drifts, and
-    // resume doesn't always restart tracking. Cancel + rebuild from saved
-    // position is deterministic and works everywhere.
     this.getSynth()?.cancel();
     this.currentUtterance = null;
 
-    // Restore the snapshotted position
-    this.currentWordIndex = savedPosition;
+    this._currentWordIndex = savedPosition;
     this.callbacks.onWordChange(savedPosition);
     this.setPlaybackState('paused');
   }
 
-  /**
-   * Stop playback and reset to beginning.
-   */
   stop(): void {
     this.clearAllTimers();
     this.getSynth()?.cancel();
     this.currentUtterance = null;
     this.currentChunk = null;
     this.nextChunk = null;
-    this.currentWordIndex = 0;
+    this._currentWordIndex = 0;
     this.documentFinished = false;
-    this.useBoundaryEvents = true;
+    this.useBoundaryEventsFlag = true;
     this.setPlaybackState('idle');
   }
 
-  /**
-   * Jump to a specific word and resume if playing.
-   */
   seekToWord(wordIndex: number): void {
     const wasPlaying = this.playbackState === 'playing';
     const clamped = Math.max(0, Math.min(wordIndex, this.words.length - 1));
@@ -125,38 +126,26 @@ export class TTSEngine {
     this.clearAllTimers();
     this.getSynth()?.cancel();
     this.currentUtterance = null;
-    this.currentWordIndex = clamped;
+    this._currentWordIndex = clamped;
     this.documentFinished = false;
 
-    this.callbacks.onWordChange(this.currentWordIndex);
+    this.callbacks.onWordChange(this._currentWordIndex);
 
     if (wasPlaying) {
       this.speakFromCurrentPosition();
     }
   }
 
-  /**
-   * Skip forward by wordCount words, clamped to end.
-   */
   skipForward(wordCount: number): void {
-    this.seekToWord(this.currentWordIndex + wordCount);
+    this.seekToWord(this._currentWordIndex + wordCount);
   }
 
-  /**
-   * Skip backward by wordCount words, clamped to start.
-   */
   skipBackward(wordCount: number): void {
-    this.seekToWord(this.currentWordIndex - wordCount);
+    this.seekToWord(this._currentWordIndex - wordCount);
   }
 
-  /**
-   * Change playback speed. Restarts utterance if currently playing.
-   */
   setSpeed(rate: number): void {
-    const clamped = Math.max(
-      this.platformConfig.minRate,
-      Math.min(rate, this.platformConfig.maxRate)
-    );
+    const clamped = Math.max(this.minRate, Math.min(rate, this.maxRate));
     this.rate = clamped;
 
     if (this.playbackState === 'playing') {
@@ -164,12 +153,9 @@ export class TTSEngine {
     }
   }
 
-  /**
-   * Change voice. Restarts utterance if currently playing.
-   */
   setVoice(voiceURI: string): void {
     this.voiceURI = voiceURI;
-    this.resolvedVoice = null; // Force re-resolution
+    this.resolvedVoice = null;
 
     if (this.playbackState === 'playing') {
       this.restartFromCurrentPosition();
@@ -177,16 +163,13 @@ export class TTSEngine {
   }
 
   getCurrentWordIndex(): number {
-    return this.currentWordIndex;
+    return this._currentWordIndex;
   }
 
   isDocumentFinished(): boolean {
     return this.documentFinished;
   }
 
-  /**
-   * Clean up all resources.
-   */
   destroy(): void {
     this.isDestroyed = true;
     this.clearAllTimers();
@@ -196,16 +179,18 @@ export class TTSEngine {
     this.setPlaybackState('idle');
   }
 
-  // ─── Private Methods ────────────────────────────────────────────
+  // ─── Protected helpers (available to subclasses) ────────────────
 
-  private isSpeechSynthesisAvailable(): boolean {
+  protected isSpeechSynthesisAvailable(): boolean {
     return typeof window !== 'undefined' && 'speechSynthesis' in window;
   }
 
-  private getSynth(): SpeechSynthesis | null {
+  protected getSynth(): SpeechSynthesis | null {
     if (!this.isSpeechSynthesisAvailable()) return null;
     return window.speechSynthesis;
   }
+
+  // ─── Private implementation ─────────────────────────────────────
 
   private setPlaybackState(state: PlaybackState): void {
     this.playbackState = state;
@@ -213,18 +198,17 @@ export class TTSEngine {
   }
 
   private speakFromCurrentPosition(): void {
-    if (this.currentWordIndex >= this.words.length) {
+    if (this._currentWordIndex >= this.words.length) {
       this.handleDocumentFinished();
       return;
     }
 
-    this.useBoundaryEvents = this.platformConfig.hasBoundaryEvents;
-    this.chunkBuilder = new ChunkBuilder(); // Reset chunk IDs for clean state
-    this.currentChunk = this.chunkBuilder.buildChunk(this.words, this.currentWordIndex);
+    this.useBoundaryEventsFlag = this.hasBoundaryEvents;
+    this.chunkBuilder = new ChunkBuilder();
+    this.currentChunk = this.chunkBuilder.buildChunk(this.words, this._currentWordIndex);
     this.nextChunk = null;
 
-    // Confirm position before speaking so highlight is immediately correct
-    this.callbacks.onWordChange(this.currentWordIndex);
+    this.callbacks.onWordChange(this._currentWordIndex);
     this.speakChunk(this.currentChunk);
     this.setPlaybackState('playing');
   }
@@ -248,17 +232,14 @@ export class TTSEngine {
     const utterance = new SpeechSynthesisUtterance(chunk.text);
     utterance.rate = this.rate;
 
-    // Resolve voice
     const voice = this.resolveVoice();
     if (voice) {
       utterance.voice = voice;
     }
 
-    // Keep strong reference to prevent GC
     this.currentUtterance = utterance;
 
-    // Guard: only process events from THIS utterance, not stale ones
-    // that fire after cancel() during voice/speed changes
+    // Guard: only process events from THIS utterance
     utterance.onboundary = (e) => {
       if (this.currentUtterance !== utterance) return;
       this.handleBoundary(e);
@@ -272,9 +253,10 @@ export class TTSEngine {
       this.handleUtteranceError(e);
     };
 
-    // Start timers
     this.startWatchdogTimer(chunk);
-    this.startSafariEndTimer(chunk);
+    if (this.needsSafariEndTimer) {
+      this.startSafariEndTimerImpl(chunk);
+    }
     this.startBoundaryFallbackTimer();
 
     synth.speak(utterance);
@@ -286,20 +268,17 @@ export class TTSEngine {
     const charIndex = event.charIndex;
 
     if (!this.boundaryTracker.validateCharIndex(charIndex)) {
-      // Switch to time-based estimation
-      this.useBoundaryEvents = false;
+      this.useBoundaryEventsFlag = false;
       return;
     }
 
     const wordIndex = this.boundaryTracker.resolveWordIndex(charIndex);
-    this.currentWordIndex = wordIndex;
+    this._currentWordIndex = wordIndex;
     this.callbacks.onWordChange(wordIndex);
 
-    // Reset boundary fallback timer since we got an event
     this.clearBoundaryFallbackTimer();
     this.startBoundaryFallbackTimer();
 
-    // Pre-build next chunk when ~50% through current chunk
     if (this.currentChunk && !this.nextChunk) {
       const chunkWordCount = this.currentChunk.endWordIndex - this.currentChunk.startWordIndex + 1;
       const progress = wordIndex - this.currentChunk.startWordIndex;
@@ -318,18 +297,16 @@ export class TTSEngine {
 
     const finishedChunk = this.currentChunk;
     if (finishedChunk) {
-      this.currentWordIndex = finishedChunk.endWordIndex + 1;
+      this._currentWordIndex = finishedChunk.endWordIndex + 1;
       this.callbacks.onChunkComplete(finishedChunk.endWordIndex);
     }
 
-    // Check if document is finished
-    if (this.currentWordIndex >= this.words.length) {
+    if (this._currentWordIndex >= this.words.length) {
       this.handleDocumentFinished();
       return;
     }
 
-    // Speak next chunk immediately (no setTimeout)
-    const next = this.nextChunk ?? this.chunkBuilder.buildChunk(this.words, this.currentWordIndex);
+    const next = this.nextChunk ?? this.chunkBuilder.buildChunk(this.words, this._currentWordIndex);
     this.currentChunk = next;
     this.nextChunk = null;
     this.speakChunk(next);
@@ -339,7 +316,6 @@ export class TTSEngine {
     if (this.isDestroyed) return;
     this.clearAllTimers();
 
-    // 'interrupted' and 'canceled' are expected during pause/seek/stop
     if (event.error === 'interrupted' || event.error === 'canceled') {
       return;
     }
@@ -384,7 +360,6 @@ export class TTSEngine {
 
     this.watchdogTimer = setTimeout(() => {
       if (this.playbackState === 'playing' && !this.isDestroyed) {
-        // Watchdog fired: cancel and restart from last known position
         this.getSynth()?.cancel();
         this.currentUtterance = null;
         this.speakFromCurrentPosition();
@@ -392,26 +367,21 @@ export class TTSEngine {
     }, timeout);
   }
 
-  private startSafariEndTimer(chunk: UtteranceChunk): void {
+  private startSafariEndTimerImpl(chunk: UtteranceChunk): void {
     this.clearSafariEndTimer();
-
-    // Only use Safari end timer on platforms that use cancel-for-pause (Safari/Android)
-    if (!this.platformConfig.useCancelForPause) return;
-
     const timeout = (chunk.text.length * 100 / this.rate) + 5000;
 
     this.safariEndTimer = setTimeout(() => {
       if (this.playbackState === 'playing' && !this.isDestroyed) {
-        // Force-advance: onend hasn't fired
         this.getSynth()?.cancel();
         this.currentUtterance = null;
 
         if (this.currentChunk) {
-          this.currentWordIndex = this.currentChunk.endWordIndex + 1;
+          this._currentWordIndex = this.currentChunk.endWordIndex + 1;
           this.callbacks.onChunkComplete(this.currentChunk.endWordIndex);
         }
 
-        if (this.currentWordIndex >= this.words.length) {
+        if (this._currentWordIndex >= this.words.length) {
           this.handleDocumentFinished();
         } else {
           this.speakFromCurrentPosition();
@@ -421,13 +391,12 @@ export class TTSEngine {
   }
 
   private startBoundaryFallbackTimer(): void {
-    if (!this.useBoundaryEvents) return;
+    if (!this.useBoundaryEventsFlag) return;
 
     this.clearBoundaryFallbackTimer();
     this.boundaryFallbackTimer = setTimeout(() => {
       if (this.playbackState === 'playing' && !this.isDestroyed) {
-        // No boundary event for 500ms, switch to time estimation
-        this.useBoundaryEvents = false;
+        this.useBoundaryEventsFlag = false;
         this.startTimeEstimationLoop();
       }
     }, 500);
@@ -438,39 +407,29 @@ export class TTSEngine {
 
     const estimate = this.boundaryTracker.estimateWordIndex(
       Date.now() - this.utteranceStartTime,
-      this.rate
+      this.rate,
     );
 
-    if (estimate !== this.currentWordIndex && estimate <= (this.currentChunk?.endWordIndex ?? 0)) {
-      this.currentWordIndex = estimate;
+    if (estimate !== this._currentWordIndex && estimate <= (this.currentChunk?.endWordIndex ?? 0)) {
+      this._currentWordIndex = estimate;
       this.callbacks.onWordChange(estimate);
     }
 
-    // Continue estimating every 200ms
     this.boundaryFallbackTimer = setTimeout(() => {
       this.startTimeEstimationLoop();
     }, 200);
   }
 
   private clearWatchdogTimer(): void {
-    if (this.watchdogTimer !== null) {
-      clearTimeout(this.watchdogTimer);
-      this.watchdogTimer = null;
-    }
+    if (this.watchdogTimer !== null) { clearTimeout(this.watchdogTimer); this.watchdogTimer = null; }
   }
 
   private clearSafariEndTimer(): void {
-    if (this.safariEndTimer !== null) {
-      clearTimeout(this.safariEndTimer);
-      this.safariEndTimer = null;
-    }
+    if (this.safariEndTimer !== null) { clearTimeout(this.safariEndTimer); this.safariEndTimer = null; }
   }
 
   private clearBoundaryFallbackTimer(): void {
-    if (this.boundaryFallbackTimer !== null) {
-      clearTimeout(this.boundaryFallbackTimer);
-      this.boundaryFallbackTimer = null;
-    }
+    if (this.boundaryFallbackTimer !== null) { clearTimeout(this.boundaryFallbackTimer); this.boundaryFallbackTimer = null; }
   }
 
   private clearAllTimers(): void {
@@ -483,7 +442,6 @@ export class TTSEngine {
 
   private setupVisibilityListener(): void {
     if (typeof document === 'undefined') return;
-
     this.removeVisibilityListener();
 
     this.boundVisibilityHandler = () => {
@@ -497,7 +455,6 @@ export class TTSEngine {
 
   private removeVisibilityListener(): void {
     if (typeof document === 'undefined') return;
-
     if (this.boundVisibilityHandler) {
       document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
       this.boundVisibilityHandler = null;

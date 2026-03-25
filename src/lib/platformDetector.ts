@@ -1,15 +1,14 @@
-interface PlatformTTSStrategy {
-  useCancelForPause: boolean;
-  hasBoundaryEvents: boolean;
-  maxRate: number;
-  minRate: number;
-}
+/**
+ * Browser/platform detection helpers.
+ *
+ * Used by the TTS engine factory (createTTSEngine) to select the right
+ * platform subclass, and by UI components for Safari-specific behavior.
+ */
 
 let cachedIsSafari: boolean | null = null;
 let cachedIsSafariIOS: boolean | null = null;
 let cachedIsChromeAndroid: boolean | null = null;
 let cachedIsFirefoxLinux: boolean | null = null;
-let cachedStrategy: PlatformTTSStrategy | null = null;
 
 function getUA(): string {
   if (typeof navigator === 'undefined') return '';
@@ -46,41 +45,4 @@ export function isFirefoxLinux(): boolean {
   const ua = getUA();
   cachedIsFirefoxLinux = /Firefox/.test(ua) && /Linux/.test(ua) && !/Android/.test(ua);
   return cachedIsFirefoxLinux;
-}
-
-export function getPlatformTTSStrategy(): PlatformTTSStrategy {
-  if (cachedStrategy !== null) return cachedStrategy;
-
-  if (isSafari()) {
-    cachedStrategy = {
-      useCancelForPause: true,
-      hasBoundaryEvents: false,
-      maxRate: 2.0,
-      minRate: 0.8,
-    };
-  } else if (isChromeAndroid()) {
-    cachedStrategy = {
-      useCancelForPause: true,
-      hasBoundaryEvents: false,
-      maxRate: 3.0,
-      minRate: 0.5,
-    };
-  } else if (isFirefoxLinux()) {
-    cachedStrategy = {
-      useCancelForPause: false,
-      hasBoundaryEvents: false,
-      maxRate: 3.0,
-      minRate: 0.5,
-    };
-  } else {
-    // Chrome desktop / Edge / other Chromium
-    cachedStrategy = {
-      useCancelForPause: false,
-      hasBoundaryEvents: true,
-      maxRate: 3.0,
-      minRate: 0.5,
-    };
-  }
-
-  return cachedStrategy;
 }

@@ -46,6 +46,8 @@ export function ReaderView({ document: doc }: ReaderViewProps) {
     availableVoices,
     speed,
     selectedVoiceURI,
+    minRate,
+    maxRate,
   } = useTTS(currentChapterWords, doc.chapters, doc.id);
 
   const handleNextChapter = nextChapter;
@@ -134,6 +136,8 @@ export function ReaderView({ document: doc }: ReaderViewProps) {
         onVoiceChange={setVoice}
         onToggleTouchGuard={toggleTouchGuard}
         onChapterTitleClick={() => setChapterNavOpen(true)}
+        minRate={minRate}
+        maxRate={maxRate}
       />
 
       <ChapterNav

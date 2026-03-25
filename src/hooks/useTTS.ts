@@ -2,15 +2,16 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/store';
-import { TTSEngine } from '@/engine/tts/TTSEngine';
-import { getPlatformTTSStrategy, isSafari } from '@/lib/platformDetector';
+import type { TTSEngineBase } from '@/engine/tts/TTSEngineBase';
+import { createTTSEngine } from '@/engine/tts/createTTSEngine';
+import { isSafari } from '@/lib/platformDetector';
 import { getReadingState, saveReadingState } from '@/db/readingState';
 import { POSITION_SAVE_DEBOUNCE_MS } from '@/lib/constants';
 import type { Word, Chapter, ReadingState } from '@/types';
 import type { TTSCallbacks } from '@/engine/tts/types';
 
 export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
-  const engineRef = useRef<TTSEngine | null>(null);
+  const engineRef = useRef<TTSEngineBase | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wordIndexRef = useRef(0);
   const initializedRef = useRef(false);
@@ -70,8 +71,6 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
   // ── Effect 1: Engine lifecycle (create on mount, destroy on unmount) ──
   // Only depends on docId — runs once per document, NOT on chapter changes.
   useEffect(() => {
-    const platformConfig = getPlatformTTSStrategy();
-
     const callbacks: TTSCallbacks = {
       onWordChange: (wordIndex: number) => {
         wordIndexRef.current = wordIndex;
@@ -99,7 +98,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
       },
     };
 
-    const engine = new TTSEngine(callbacks, platformConfig);
+    const engine = createTTSEngine(callbacks);
     engineRef.current = engine;
 
     return () => {
@@ -342,5 +341,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     nextChapter, prevChapter, goToChapter,
     playbackState, currentWordIndex, currentChapterIndex,
     availableVoices, speed, selectedVoiceURI,
+    minRate: engineRef.current?.minRate ?? 0.5,
+    maxRate: engineRef.current?.maxRate ?? 3.0,
   };
 }

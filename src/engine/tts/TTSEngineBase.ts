@@ -95,15 +95,27 @@ export abstract class TTSEngineBase {
 
     this.clearAllTimers();
 
-    // Snapshot position BEFORE cancelling — boundary events can fire
-    // between cancel() and state update, causing the position to jump.
-    const savedPosition = this._currentWordIndex;
+    // Estimate the actual speech position using elapsed time.
+    // Boundary events lag behind the actual speech by 200-500ms,
+    // so the last reported word index is behind where the voice is.
+    // Using the time estimator gives us a more accurate position
+    // so the user doesn't re-hear words when they resume.
+    let pausePosition = this._currentWordIndex;
+    if (this.currentChunk) {
+      const elapsed = Date.now() - this.utteranceStartTime;
+      const estimated = this.boundaryTracker.estimateWordIndex(elapsed, this.rate);
+      // Only use the estimate if it's ahead of the last boundary report
+      // and still within the current chunk
+      if (estimated > pausePosition && estimated <= this.currentChunk.endWordIndex) {
+        pausePosition = estimated;
+      }
+    }
 
     this.getSynth()?.cancel();
     this.currentUtterance = null;
 
-    this._currentWordIndex = savedPosition;
-    this.callbacks.onWordChange(savedPosition);
+    this._currentWordIndex = pausePosition;
+    this.callbacks.onWordChange(pausePosition);
     this.setPlaybackState('paused');
   }
 

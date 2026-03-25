@@ -93,35 +93,25 @@ export function TextDisplay({
       el.setAttribute('aria-current', 'true');
       highlightedRef.current = el;
 
-      // Only scroll if the element is outside the visible area
-      const containerRect = container.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-
-      const isVisible = (
-        elRect.top >= containerRect.top - 50 &&
-        elRect.bottom <= containerRect.bottom + 50
-      );
-
-      if (!isVisible) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      // Auto-scroll into view
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [currentWordIndex]);
 
-  const handleContainerClick = useCallback((e: React.MouseEvent) => {
-    if (touchGuardEnabled) return;
-    const target = e.target as HTMLElement;
-    const wordIndex = target.getAttribute('data-word-index');
-    if (wordIndex !== null) {
-      onSeekToWord(parseInt(wordIndex, 10));
-    }
-  }, [touchGuardEnabled, onSeekToWord]);
+  const handleWordClick = useCallback(
+    (wordIndex: number) => {
+      if (!touchGuardEnabled) {
+        onSeekToWord(wordIndex);
+      }
+    },
+    [touchGuardEnabled, onSeekToWord],
+  );
 
   return (
     <div ref={containerRef} className="relative flex-1 overflow-y-auto scroll-touch">
       <TouchGuard enabled={touchGuardEnabled} onDisable={onDisableTouchGuard} />
 
-      <div className="mx-auto max-w-2xl px-5 py-8 leading-[1.7]" onClick={handleContainerClick}>
+      <div className="mx-auto max-w-2xl px-5 py-8 leading-[1.7]">
         {paragraphs.map((para, pIdx) => (
           <div key={pIdx}>
             {para.chapterTitle && (
@@ -133,15 +123,16 @@ export function TextDisplay({
               </div>
             )}
             <p className="mb-4 text-foreground">
-              {para.words.map((word, i) => (
-                <span
-                  key={word.index}
-                  data-word-index={word.index}
-                  role="button"
-                  tabIndex={-1}
-                  className="word cursor-pointer bg-transparent p-0 mr-[0.3em] font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm inline"
-                >
-                  {word.text}
+              {para.words.map((word) => (
+                <span key={word.index} className="inline">
+                  <button
+                    type="button"
+                    data-word-index={word.index}
+                    onClick={() => handleWordClick(word.index)}
+                    className="word cursor-pointer border-none bg-transparent p-0 font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm"
+                  >
+                    {word.text}
+                  </button>{' '}
                 </span>
               ))}
             </p>

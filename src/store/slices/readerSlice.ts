@@ -7,7 +7,7 @@ export const createReaderSlice: StateCreator<
   [],
   [],
   ReaderSlice
-> = (set, get) => ({
+> = (set) => ({
   currentDocId: null,
   currentChapterIndex: 0,
   currentChapterWords: [],
@@ -39,7 +39,7 @@ export const createReaderSlice: StateCreator<
     }),
 
   setChapter: async (chapterIndex: number) => {
-    const docId = get().currentDocId;
+    const docId = useAppStoreDocId();
     if (!docId) return;
 
     const { prev, current, next } = await getAdjacentChapterWords(
@@ -54,3 +54,17 @@ export const createReaderSlice: StateCreator<
     });
   },
 });
+
+/**
+ * Helper to read currentDocId from the store at call time.
+ * We use zustand's getState via a lazy import to avoid circular deps.
+ */
+function useAppStoreDocId(): string | null {
+  // This will be resolved at runtime after the store is created.
+  // We use dynamic require to break the circular dependency.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAppStore } = require('../index') as {
+    useAppStore: { getState: () => AppStore };
+  };
+  return useAppStore.getState().currentDocId;
+}

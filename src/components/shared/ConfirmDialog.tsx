@@ -24,7 +24,7 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -33,7 +33,7 @@ export function ConfirmDialog({
     if (isOpen && !dialog.open) {
       dialog.showModal();
       // Focus the cancel button by default for safety
-      cancelRef.current?.focus();
+      confirmRef.current?.focus();
     } else if (!isOpen && dialog.open) {
       dialog.close();
     }
@@ -91,7 +91,6 @@ export function ConfirmDialog({
         </p>
         <div className="flex gap-3 justify-end">
           <button
-            ref={cancelRef}
             type="button"
             onClick={onCancel}
             className="inline-flex h-11 items-center justify-center rounded-lg
@@ -103,6 +102,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </button>
           <button
+            ref={confirmRef}
             type="button"
             onClick={onConfirm}
             className={`inline-flex h-11 items-center justify-center rounded-lg

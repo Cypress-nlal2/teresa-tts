@@ -16,6 +16,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: 'teresa-tts-settings',
+      skipHydration: true,
       partialize: (state) => ({
         theme: state.theme,
         touchGuardEnabled: state.touchGuardEnabled,

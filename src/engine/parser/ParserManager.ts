@@ -166,9 +166,7 @@ export class ParserManager {
 
       if (words.length > 0) {
         chapters.push({ title: chTitle, startWordIndex, endWordIndex });
-        for (let j = 0; j < words.length; j++) {
-          allWords.push(words[j]);
-        }
+        allWords.push(...words);
         globalIndex += words.length;
       }
 

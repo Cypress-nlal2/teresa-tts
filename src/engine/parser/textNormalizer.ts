@@ -11,9 +11,6 @@
 export function normalizeText(text: string): string {
   let result = text;
 
-  // Strip HTML tags (defense-in-depth against XSS)
-  result = result.replace(/<[^>]*>/g, '');
-
   // Remove null / control characters (keep \n \r \t)
   result = result.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 

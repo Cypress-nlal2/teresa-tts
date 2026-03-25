@@ -31,8 +31,7 @@ export function VoiceSelector({
 
   const handlePreview = useCallback((voice: SpeechSynthesisVoice) => {
     if (typeof window === 'undefined') return;
-    // Don't preview if speech is currently active (would cancel document playback)
-    if (speechSynthesis.speaking || speechSynthesis.pending) return;
+    speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance('Hello, this is a preview.');
     utterance.voice = voice;
     utterance.rate = 1;

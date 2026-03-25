@@ -19,6 +19,11 @@ export function useKeyboardShortcuts(actions: KeyboardActions) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
+      // Don't interfere with slider (e.g. progress bar) keyboard navigation
+      if (e.defaultPrevented) return;
+      const target = e.target as HTMLElement;
+      if (target.getAttribute('role') === 'slider') return;
+
       switch (e.key) {
         case ' ':
           e.preventDefault();

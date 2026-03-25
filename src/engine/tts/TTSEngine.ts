@@ -71,18 +71,7 @@ export class TTSEngine {
       this.documentFinished = false;
     }
 
-    if (this.playbackState === 'paused' && !this.platformConfig.useCancelForPause) {
-      // Desktop resume via speechSynthesis.resume()
-      this.getSynth()?.resume();
-      this.setPlaybackState('playing');
-      // Confirm position and restart tracking
-      this.callbacks.onWordChange(this.currentWordIndex);
-      this.utteranceStartTime = Date.now();
-      this.startBoundaryFallbackTimer();
-      return;
-    }
-
-    // Start fresh or resume from saved position (cancel-for-pause strategy)
+    // Always start fresh from current position (cancel-for-pause on all platforms)
     this.speakFromCurrentPosition();
   }
 
@@ -94,16 +83,20 @@ export class TTSEngine {
 
     this.clearAllTimers();
 
-    if (this.platformConfig.useCancelForPause) {
-      // Cancel-for-pause: save position and cancel
-      this.getSynth()?.cancel();
-      this.currentUtterance = null;
-    } else {
-      this.getSynth()?.pause();
-    }
+    // Snapshot position BEFORE cancelling — boundary events can still fire
+    // between cancel() and state update, causing the position to jump.
+    const savedPosition = this.currentWordIndex;
 
-    // Always confirm current position on pause so highlight stays in sync
-    this.callbacks.onWordChange(this.currentWordIndex);
+    // Always use cancel-for-pause on ALL platforms. speechSynthesis.pause()/
+    // resume() is unreliable — boundary events desync, position drifts, and
+    // resume doesn't always restart tracking. Cancel + rebuild from saved
+    // position is deterministic and works everywhere.
+    this.getSynth()?.cancel();
+    this.currentUtterance = null;
+
+    // Restore the snapshotted position
+    this.currentWordIndex = savedPosition;
+    this.callbacks.onWordChange(savedPosition);
     this.setPlaybackState('paused');
   }
 
@@ -405,7 +398,7 @@ export class TTSEngine {
     // Only use Safari end timer on platforms that use cancel-for-pause (Safari/Android)
     if (!this.platformConfig.useCancelForPause) return;
 
-    const timeout = chunk.text.length * 100 + 5000;
+    const timeout = (chunk.text.length * 100 / this.rate) + 5000;
 
     this.safariEndTimer = setTimeout(() => {
       if (this.playbackState === 'playing' && !this.isDestroyed) {

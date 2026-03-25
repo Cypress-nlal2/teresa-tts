@@ -133,16 +133,16 @@ export function TextDisplay({
               </div>
             )}
             <p className="mb-4 text-foreground">
-              {para.words.map((word) => (
+              {para.words.map((word, i) => (
                 <span
                   key={word.index}
                   data-word-index={word.index}
                   role="button"
                   tabIndex={-1}
-                  className="word cursor-pointer bg-transparent p-0 font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm"
+                  className="word cursor-pointer bg-transparent p-0 mr-[0.3em] font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm inline"
                 >
                   {word.text}
-                </span>{' '}
+                </span>
               ))}
             </p>
           </div>

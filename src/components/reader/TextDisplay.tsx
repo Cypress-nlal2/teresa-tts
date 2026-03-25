@@ -142,8 +142,8 @@ export function TextDisplay({
                   className="word cursor-pointer bg-transparent p-0 font-inherit text-inherit text-base leading-[1.7] transition-colors duration-75 hover:bg-surface-hover rounded-sm"
                 >
                   {word.text}
-                </span>
-              ))}{' '}
+                </span>{' '}
+              ))}
             </p>
           </div>
         ))}

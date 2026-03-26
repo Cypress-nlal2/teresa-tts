@@ -118,10 +118,10 @@ export function TextDisplay({
   }, [touchGuardEnabled, onSeekToWord]);
 
   return (
-    <div ref={containerRef} className="relative flex-1 overflow-y-auto scroll-touch">
+    <div ref={containerRef} className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-touch">
       <TouchGuard enabled={touchGuardEnabled} onDisable={onDisableTouchGuard} />
 
-      <div className="mx-auto max-w-2xl px-5 py-8 leading-[1.7]" onClick={handleContainerClick}>
+      <div className="mx-auto max-w-2xl px-5 py-8 leading-[1.7] overflow-x-hidden" onClick={handleContainerClick} style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
         {paragraphs.map((para, pIdx) => (
           <div key={pIdx}>
             {para.chapterTitle && (
@@ -132,7 +132,7 @@ export function TextDisplay({
                 </h2>
               </div>
             )}
-            <p className="mb-4 text-foreground">
+            <p className="mb-4 text-foreground" style={{ overflowWrap: 'break-word' }}>
               {para.words.map((word, i) => (
                 <span
                   key={word.index}

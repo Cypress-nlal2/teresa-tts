@@ -34,6 +34,7 @@ export abstract class TTSEngineBase {
   private chapters: Chapter[] = [];
 
   private _currentWordIndex = 0;
+  private globalIndexOffset = 0;
   private playbackState: PlaybackState = 'idle';
 
   private chunkBuilder: ChunkBuilder;
@@ -69,7 +70,9 @@ export abstract class TTSEngineBase {
   initialize(words: Word[], chapters: Chapter[], startWordIndex?: number): void {
     this.words = words;
     this.chapters = chapters;
-    this._currentWordIndex = startWordIndex ?? 0;
+    this.globalIndexOffset = words.length > 0 ? words[0].index : 0;
+    const globalStart = startWordIndex ?? this.globalIndexOffset;
+    this._currentWordIndex = globalStart - this.globalIndexOffset;
     this.documentFinished = false;
     this.setPlaybackState('idle');
     this.setupVisibilityListener();
@@ -95,27 +98,18 @@ export abstract class TTSEngineBase {
 
     this.clearAllTimers();
 
-    // Estimate the actual speech position using elapsed time.
-    // Boundary events lag behind the actual speech by 200-500ms,
-    // so the last reported word index is behind where the voice is.
-    // Using the time estimator gives us a more accurate position
-    // so the user doesn't re-hear words when they resume.
-    let pausePosition = this._currentWordIndex;
-    if (this.currentChunk) {
-      const elapsed = Date.now() - this.utteranceStartTime;
-      const estimated = this.boundaryTracker.estimateWordIndex(elapsed, this.rate);
-      // Only use the estimate if it's ahead of the last boundary report
-      // and still within the current chunk
-      if (estimated > pausePosition && estimated <= this.currentChunk.endWordIndex) {
-        pausePosition = estimated;
-      }
-    }
+    // Use the last reported boundary position and rewind 3 words.
+    // Speech is always a few words ahead of the last boundary event,
+    // and users prefer re-hearing a couple of words over skipping ahead.
+    const REWIND_WORDS = 3;
+    const chunkStart = this.currentChunk?.startWordIndex ?? 0;
+    const pausePosition = Math.max(chunkStart, this._currentWordIndex - REWIND_WORDS);
 
     this.getSynth()?.cancel();
     this.currentUtterance = null;
 
     this._currentWordIndex = pausePosition;
-    this.callbacks.onWordChange(pausePosition);
+    this.callbacks.onWordChange(pausePosition + this.globalIndexOffset);
     this.setPlaybackState('paused');
   }
 
@@ -133,7 +127,8 @@ export abstract class TTSEngineBase {
 
   seekToWord(wordIndex: number): void {
     const wasPlaying = this.playbackState === 'playing';
-    const clamped = Math.max(0, Math.min(wordIndex, this.words.length - 1));
+    const localIndex = wordIndex - this.globalIndexOffset;
+    const clamped = Math.max(0, Math.min(localIndex, this.words.length - 1));
 
     this.clearAllTimers();
     this.getSynth()?.cancel();
@@ -141,7 +136,7 @@ export abstract class TTSEngineBase {
     this._currentWordIndex = clamped;
     this.documentFinished = false;
 
-    this.callbacks.onWordChange(this._currentWordIndex);
+    this.callbacks.onWordChange(this._currentWordIndex + this.globalIndexOffset);
 
     if (wasPlaying) {
       this.speakFromCurrentPosition();
@@ -149,11 +144,11 @@ export abstract class TTSEngineBase {
   }
 
   skipForward(wordCount: number): void {
-    this.seekToWord(this._currentWordIndex + wordCount);
+    this.seekToWord(this._currentWordIndex + this.globalIndexOffset + wordCount);
   }
 
   skipBackward(wordCount: number): void {
-    this.seekToWord(this._currentWordIndex - wordCount);
+    this.seekToWord(this._currentWordIndex + this.globalIndexOffset - wordCount);
   }
 
   setSpeed(rate: number): void {
@@ -175,7 +170,7 @@ export abstract class TTSEngineBase {
   }
 
   getCurrentWordIndex(): number {
-    return this._currentWordIndex;
+    return this._currentWordIndex + this.globalIndexOffset;
   }
 
   isDocumentFinished(): boolean {
@@ -220,7 +215,7 @@ export abstract class TTSEngineBase {
     this.currentChunk = this.chunkBuilder.buildChunk(this.words, this._currentWordIndex);
     this.nextChunk = null;
 
-    this.callbacks.onWordChange(this._currentWordIndex);
+    this.callbacks.onWordChange(this._currentWordIndex + this.globalIndexOffset);
     this.speakChunk(this.currentChunk);
     this.setPlaybackState('playing');
   }
@@ -286,7 +281,7 @@ export abstract class TTSEngineBase {
 
     const wordIndex = this.boundaryTracker.resolveWordIndex(charIndex);
     this._currentWordIndex = wordIndex;
-    this.callbacks.onWordChange(wordIndex);
+    this.callbacks.onWordChange(wordIndex + this.globalIndexOffset);
 
     this.clearBoundaryFallbackTimer();
     this.startBoundaryFallbackTimer();
@@ -310,7 +305,7 @@ export abstract class TTSEngineBase {
     const finishedChunk = this.currentChunk;
     if (finishedChunk) {
       this._currentWordIndex = finishedChunk.endWordIndex + 1;
-      this.callbacks.onChunkComplete(finishedChunk.endWordIndex);
+      this.callbacks.onChunkComplete(finishedChunk.endWordIndex + this.globalIndexOffset);
     }
 
     if (this._currentWordIndex >= this.words.length) {
@@ -390,7 +385,7 @@ export abstract class TTSEngineBase {
 
         if (this.currentChunk) {
           this._currentWordIndex = this.currentChunk.endWordIndex + 1;
-          this.callbacks.onChunkComplete(this.currentChunk.endWordIndex);
+          this.callbacks.onChunkComplete(this.currentChunk.endWordIndex + this.globalIndexOffset);
         }
 
         if (this._currentWordIndex >= this.words.length) {
@@ -424,7 +419,7 @@ export abstract class TTSEngineBase {
 
     if (estimate !== this._currentWordIndex && estimate <= (this.currentChunk?.endWordIndex ?? 0)) {
       this._currentWordIndex = estimate;
-      this.callbacks.onWordChange(estimate);
+      this.callbacks.onWordChange(estimate + this.globalIndexOffset);
     }
 
     this.boundaryFallbackTimer = setTimeout(() => {

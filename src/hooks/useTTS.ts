@@ -16,6 +16,9 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
   const wordIndexRef = useRef(0);
   const initializedRef = useRef(false);
   const pendingSeekRef = useRef<{ wordIndex: number; shouldPlay: boolean } | null>(null);
+  const lastSkipTimeRef = useRef(0);
+  const chaptersRef = useRef<Chapter[]>(chapters);
+  chaptersRef.current = chapters;
 
   const setPlaybackState = useAppStore((s) => s.setPlaybackState);
   const setCurrentWordIndex = useAppStore((s) => s.setCurrentWordIndex);
@@ -82,16 +85,28 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
       },
       onChunkComplete: () => {},
       onFinished: () => {
-        const rs: ReadingState = {
-          docId,
-          currentWordIndex: wordIndexRef.current,
-          currentChapterIndex: useAppStore.getState().currentChapterIndex,
-          speed: useAppStore.getState().speed,
-          voiceURI: useAppStore.getState().selectedVoiceURI,
-          lastReadAt: Date.now(),
-          isFinished: true,
-        };
-        saveReadingState(rs);
+        const store = useAppStore.getState();
+        const chapterIdx = store.currentChapterIndex;
+        const allChapters = chaptersRef.current;
+
+        if (chapterIdx < allChapters.length - 1) {
+          // More chapters remain — advance to the next one and keep playing
+          const nextIdx = chapterIdx + 1;
+          pendingSeekRef.current = { wordIndex: allChapters[nextIdx].startWordIndex, shouldPlay: true };
+          store.setChapter(nextIdx);
+        } else {
+          // Last chapter — save as finished
+          const rs: ReadingState = {
+            docId,
+            currentWordIndex: wordIndexRef.current,
+            currentChapterIndex: chapterIdx,
+            speed: store.speed,
+            voiceURI: store.selectedVoiceURI,
+            lastReadAt: Date.now(),
+            isFinished: true,
+          };
+          saveReadingState(rs);
+        }
       },
       onError: (error: string) => {
         console.error('[TTS Error]', error);
@@ -263,12 +278,18 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
 
   const skipForward = useCallback(
     (wordCount: number) => {
+      // Throttle rapid skips to prevent overshooting the document
+      const now = Date.now();
+      if (now - lastSkipTimeRef.current < 300) return;
+      lastSkipTimeRef.current = now;
+
       const currentIdx = engineRef.current?.getCurrentWordIndex() ?? 0;
+      const store = useAppStore.getState();
+      const shouldPlay = store.playbackState === 'playing';
       const targetIndex = Math.min(currentIdx + wordCount, (chapters[chapters.length - 1]?.endWordIndex ?? 0));
       const targetChapter = findChapterForWord(targetIndex);
-      const store = useAppStore.getState();
       if (targetChapter !== store.currentChapterIndex) {
-        pendingSeekRef.current = { wordIndex: targetIndex, shouldPlay: store.playbackState === 'playing' };
+        pendingSeekRef.current = { wordIndex: targetIndex, shouldPlay };
         engineRef.current?.pause();
         store.setChapter(targetChapter);
       } else {
@@ -281,12 +302,18 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
 
   const skipBackward = useCallback(
     (wordCount: number) => {
+      // Throttle rapid skips to prevent overshooting
+      const now = Date.now();
+      if (now - lastSkipTimeRef.current < 300) return;
+      lastSkipTimeRef.current = now;
+
       const currentIdx = engineRef.current?.getCurrentWordIndex() ?? 0;
+      const store = useAppStore.getState();
+      const shouldPlay = store.playbackState === 'playing';
       const targetIndex = Math.max(currentIdx - wordCount, 0);
       const targetChapter = findChapterForWord(targetIndex);
-      const store = useAppStore.getState();
       if (targetChapter !== store.currentChapterIndex) {
-        pendingSeekRef.current = { wordIndex: targetIndex, shouldPlay: store.playbackState === 'playing' };
+        pendingSeekRef.current = { wordIndex: targetIndex, shouldPlay };
         engineRef.current?.pause();
         store.setChapter(targetChapter);
       } else {

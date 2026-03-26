@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
-import { isSafari } from '@/lib/platformDetector';
 
 interface VoiceSelectorProps {
   voices: SpeechSynthesisVoice[];
@@ -16,17 +15,36 @@ export function VoiceSelector({
   onVoiceChange,
   onClose,
 }: VoiceSelectorProps) {
+  // Recommended voice name patterns — prioritize UK/AU male voices
+  const RECOMMENDED_PATTERNS = [
+    'daniel',     // UK male (macOS/iOS)
+    'james',      // AU male (macOS/iOS)
+    'google uk english male',   // Chrome
+    'microsoft ryan',           // Edge — UK male
+    'microsoft james',          // Edge — AU male
+    'english (united kingdom)', // Android
+    'english (australia)',       // Android
+  ];
+
   const grouped = useMemo(() => {
+    const recommended: SpeechSynthesisVoice[] = [];
     const local: SpeechSynthesisVoice[] = [];
     const network: SpeechSynthesisVoice[] = [];
+
     for (const v of voices) {
+      const nameLower = v.name.toLowerCase();
+      const isRecommended = RECOMMENDED_PATTERNS.some(p => nameLower.includes(p));
+
+      if (isRecommended) {
+        recommended.push(v);
+      }
       if (v.localService) {
         local.push(v);
       } else {
         network.push(v);
       }
     }
-    return { local, network };
+    return { recommended, local, network };
   }, [voices]);
 
   const handlePreview = useCallback((voice: SpeechSynthesisVoice) => {
@@ -38,30 +56,6 @@ export function VoiceSelector({
     utterance.rate = 1;
     speechSynthesis.speak(utterance);
   }, []);
-
-  if (isSafari()) {
-    return (
-      <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl bg-surface border border-border shadow-lg p-4 z-50">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium text-foreground">Voice</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-11 w-11 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
-            aria-label="Close voice selector"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-        <p className="text-sm text-muted">
-          Using device default voice. Safari does not support voice selection.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl bg-surface border border-border shadow-lg z-50 max-h-80 flex flex-col">
@@ -81,6 +75,15 @@ export function VoiceSelector({
       </div>
 
       <div className="overflow-y-auto px-4 pb-4 scroll-touch">
+        {grouped.recommended.length > 0 && (
+          <VoiceGroup
+            label="Recommended"
+            voices={grouped.recommended}
+            selectedVoiceURI={selectedVoiceURI}
+            onVoiceChange={onVoiceChange}
+            onPreview={handlePreview}
+          />
+        )}
         {grouped.local.length > 0 && (
           <VoiceGroup
             label="Local Voices"

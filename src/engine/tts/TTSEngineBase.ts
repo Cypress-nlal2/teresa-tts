@@ -269,7 +269,15 @@ export abstract class TTSEngineBase {
     if (this.needsSafariEndTimer) {
       this.startSafariEndTimerImpl(chunk);
     }
-    this.startBoundaryFallbackTimer();
+
+    // For platforms with boundary events, start a fallback timer that switches
+    // to time estimation if no events arrive within 500ms.
+    // For platforms WITHOUT boundary events, start time estimation immediately.
+    if (this.useBoundaryEventsFlag) {
+      this.startBoundaryFallbackTimer();
+    } else {
+      this.startTimeEstimationLoop();
+    }
 
     synth.speak(utterance);
   }

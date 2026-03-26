@@ -36,7 +36,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     (wordIndex: number) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        const state: ReadingState = {
+        saveReadingState({
           docId,
           currentWordIndex: wordIndex,
           currentChapterIndex: useAppStore.getState().currentChapterIndex,
@@ -44,8 +44,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
           voiceURI: useAppStore.getState().selectedVoiceURI,
           lastReadAt: Date.now(),
           isFinished: false,
-        };
-        saveReadingState(state);
+        });
       }, POSITION_SAVE_DEBOUNCE_MS);
     },
     [docId],
@@ -71,8 +70,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     [setCurrentWordIndex],
   );
 
-  // ── Effect 1: Engine lifecycle (create on mount, destroy on unmount) ──
-  // Only depends on docId — runs once per document, NOT on chapter changes.
+  // ── Effect 1: Engine lifecycle ──
   useEffect(() => {
     const callbacks: TTSCallbacks = {
       onWordChange: (wordIndex: number) => {
@@ -90,13 +88,11 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
         const allChapters = chaptersRef.current;
 
         if (chapterIdx < allChapters.length - 1) {
-          // More chapters remain — advance to the next one and keep playing
           const nextIdx = chapterIdx + 1;
           pendingSeekRef.current = { wordIndex: allChapters[nextIdx].startWordIndex, shouldPlay: true };
           store.setChapter(nextIdx);
         } else {
-          // Last chapter — save as finished
-          const rs: ReadingState = {
+          saveReadingState({
             docId,
             currentWordIndex: wordIndexRef.current,
             currentChapterIndex: chapterIdx,
@@ -104,8 +100,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
             voiceURI: store.selectedVoiceURI,
             lastReadAt: Date.now(),
             isFinished: true,
-          };
-          saveReadingState(rs);
+          });
         }
       },
       onError: (error: string) => {
@@ -117,27 +112,21 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     engineRef.current = engine;
 
     return () => {
-      // Flush pending save
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      // Final save — get engine position (most accurate) and store state
-      // BEFORE destroying anything, since closeDocument() may reset the store.
       const finalWordIndex = engine.getCurrentWordIndex();
       const storeState = useAppStore.getState();
-      const finalChapterIndex = storeState.currentChapterIndex;
-
       saveReadingState({
         docId,
         currentWordIndex: finalWordIndex,
-        currentChapterIndex: finalChapterIndex,
+        currentChapterIndex: storeState.currentChapterIndex,
         speed: storeState.speed,
         voiceURI: storeState.selectedVoiceURI,
         lastReadAt: Date.now(),
         isFinished: false,
       });
-
       engine.destroy();
       engineRef.current = null;
       initializedRef.current = false;
@@ -146,8 +135,6 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
   }, [docId]);
 
   // ── Effect 2: Initialize/reinitialize engine when words change ──
-  // Runs on first load AND on every chapter change. The engine already exists
-  // from Effect 1, so this is always a fast synchronous re-init.
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || words.length === 0) return;
@@ -156,12 +143,10 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
     pendingSeekRef.current = null;
 
     if (!initializedRef.current) {
-      // First initialization — restore saved state from IndexedDB
       (async () => {
         const saved = await getReadingState(docId);
         let startIndex = pending ? pending.wordIndex : (saved?.currentWordIndex ?? 0);
 
-        // Clamp to current chapter range
         const firstWord = words[0]?.index ?? 0;
         const lastWord = words[words.length - 1]?.index ?? 0;
         if (startIndex < firstWord || startIndex > lastWord) {
@@ -182,10 +167,7 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
         if (pending?.shouldPlay) engine.play();
       })();
     } else {
-      // Chapter change — synchronous re-init (no async, no race)
       const startAt = pending ? pending.wordIndex : (words[0]?.index ?? 0);
-
-      // Clamp to current chapter range
       const firstWord = words[0]?.index ?? 0;
       const lastWord = words[words.length - 1]?.index ?? 0;
       const clampedStart = (startAt < firstWord || startAt > lastWord) ? firstWord : startAt;
@@ -232,27 +214,22 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
 
   // ── Actions ──
 
-  const play = useCallback(async () => {
+  // IMPORTANT: play() must be SYNCHRONOUS to preserve Safari's user-gesture chain.
+  // Safari requires speechSynthesis.speak() to be called directly from a click
+  // handler — any await/async breaks the gesture chain and Safari silently refuses.
+  const play = useCallback(() => {
     if (!engineRef.current) return;
 
-    const saved = await getReadingState(docId);
-    if (saved?.isFinished) {
-      await saveReadingState({ ...saved, isFinished: false, currentWordIndex: 0, currentChapterIndex: 0, lastReadAt: Date.now() });
-      const store = useAppStore.getState();
-      if (store.currentChapterIndex !== 0) {
-        pendingSeekRef.current = { wordIndex: 0, shouldPlay: true };
-        await store.setChapter(0);
-        return;
-      } else {
-        engineRef.current.seekToWord(words[0]?.index ?? 0);
-        syncPosition(words[0]?.index ?? 0);
-      }
+    // If document was finished, reset to beginning
+    if (engineRef.current.isDocumentFinished()) {
+      engineRef.current.seekToWord(words[0]?.index ?? 0);
+      syncPosition(words[0]?.index ?? 0);
     }
 
     const enginePos = engineRef.current.getCurrentWordIndex();
     syncPosition(enginePos);
     engineRef.current.play();
-  }, [docId, words, syncPosition]);
+  }, [words, syncPosition]);
 
   const pause = useCallback(() => {
     engineRef.current?.pause();
@@ -284,7 +261,6 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
 
   const skipForward = useCallback(
     (wordCount: number) => {
-      // Throttle rapid skips to prevent overshooting the document
       const now = Date.now();
       if (now - lastSkipTimeRef.current < 300) return;
       lastSkipTimeRef.current = now;
@@ -308,7 +284,6 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
 
   const skipBackward = useCallback(
     (wordCount: number) => {
-      // Throttle rapid skips to prevent overshooting
       const now = Date.now();
       if (now - lastSkipTimeRef.current < 300) return;
       lastSkipTimeRef.current = now;

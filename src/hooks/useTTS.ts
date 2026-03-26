@@ -122,16 +122,22 @@ export function useTTS(words: Word[], chapters: Chapter[], docId: string) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      // Final save
+      // Final save — get engine position (most accurate) and store state
+      // BEFORE destroying anything, since closeDocument() may reset the store.
+      const finalWordIndex = engine.getCurrentWordIndex();
+      const storeState = useAppStore.getState();
+      const finalChapterIndex = storeState.currentChapterIndex;
+
       saveReadingState({
         docId,
-        currentWordIndex: wordIndexRef.current,
-        currentChapterIndex: useAppStore.getState().currentChapterIndex,
-        speed: useAppStore.getState().speed,
-        voiceURI: useAppStore.getState().selectedVoiceURI,
+        currentWordIndex: finalWordIndex,
+        currentChapterIndex: finalChapterIndex,
+        speed: storeState.speed,
+        voiceURI: storeState.selectedVoiceURI,
         lastReadAt: Date.now(),
         isFinished: false,
       });
+
       engine.destroy();
       engineRef.current = null;
       initializedRef.current = false;

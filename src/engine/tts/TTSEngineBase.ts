@@ -236,6 +236,11 @@ export abstract class TTSEngineBase {
     this.boundaryTracker.setChunk(chunk);
     this.utteranceStartTime = Date.now();
 
+    // Correction #2: Sync highlight to chunk start when a new chunk begins.
+    // This corrects any drift from time estimation in the previous chunk.
+    this._currentWordIndex = chunk.startWordIndex;
+    this.callbacks.onWordChange(chunk.startWordIndex + this.globalIndexOffset);
+
     const utterance = new SpeechSynthesisUtterance(chunk.text);
     utterance.rate = this.rate;
 
@@ -304,7 +309,11 @@ export abstract class TTSEngineBase {
 
     const finishedChunk = this.currentChunk;
     if (finishedChunk) {
+      // Correction #1: Force-sync position to chunk end.
+      // Time estimation may have drifted during the chunk — this snaps
+      // the highlight to the exact correct position before advancing.
       this._currentWordIndex = finishedChunk.endWordIndex + 1;
+      this.callbacks.onWordChange(finishedChunk.endWordIndex + this.globalIndexOffset);
       this.callbacks.onChunkComplete(finishedChunk.endWordIndex + this.globalIndexOffset);
     }
 
